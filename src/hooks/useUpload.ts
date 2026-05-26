@@ -1,0 +1,256 @@
+/**
+ * src/hooks/useUpload.ts
+ *
+ * Custom React hook that orchestrates the full client-side upload pipeline:
+ *
+ *   1. Compress the image to a lightweight WebP thumbnail using
+ *      `browser-image-compression` (runs entirely in the browser — no server
+ *      round-trip, no cost).
+ *   2. Request two presigned PUT URLs from `/api/upload`.
+ *   3. Execute both direct PUT requests to Cloudflare R2 in parallel.
+ *   4. Return the two R2 keys so the caller can persist them in the database.
+ *
+ * Why client-side compression?
+ *   Vercel serverless functions have a 4.5 MB request payload limit and a
+ *   10-second timeout on the free tier. Compressing on the client means the
+ *   Next.js server never touches the binary data — it only issues presigned
+ *   URLs — so uploads of any size work without upgrading Vercel.
+ *
+ * Dependencies required in package.json:
+ *   "browser-image-compression": "^2.0.2"
+ *
+ * Install:  npm install browser-image-compression
+ */
+
+"use client";
+
+import { useState, useCallback } from "react";
+import imageCompression from "browser-image-compression";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/** The two R2 keys returned after a successful upload. */
+export interface UploadResult {
+  /** R2 key of the full-resolution original, e.g. "originals/abc-123.png". */
+  originalKey: string;
+  /** R2 key of the WebP thumbnail, e.g. "previews/abc-123.webp". */
+  previewKey: string;
+}
+
+/** Granular upload state exposed to the UI. */
+export type UploadStatus =
+  | "idle"
+  | "compressing"
+  | "requesting_urls"
+  | "uploading"
+  | "success"
+  | "error";
+
+export interface UseUploadReturn {
+  /** Upload a single file. Returns the R2 keys on success. */
+  upload: (file: File) => Promise<UploadResult>;
+  /** Granular status of the current upload. */
+  status: UploadStatus;
+  /** Upload progress as a 0–100 integer (covers the PUT-to-R2 phase). */
+  progress: number;
+  /** Human-readable error message when `status === "error"`. */
+  error: string | null;
+  /** Reset state back to "idle" (useful after showing an error). */
+  reset: () => void;
+}
+
+// ─── Preview compression options ─────────────────────────────────────────────
+
+/**
+ * Thumbnail target: ≤ 200 KB, max 800 px on the longest edge, WebP output.
+ *
+ * Tweak `maxSizeMB` / `maxWidthOrHeight` to balance quality vs. load time.
+ * For a masonry/grid gallery, 800 px wide is typically more than sufficient.
+ */
+const PREVIEW_COMPRESSION_OPTIONS: Parameters<typeof imageCompression>[1] = {
+  maxSizeMB: 0.2,          // 200 KB ceiling
+  maxWidthOrHeight: 800,    // Downscale if either dimension exceeds 800 px
+  useWebWorker: true,       // Off the main thread — keeps the UI responsive
+  fileType: "image/webp",   // Always output WebP for maximum compression
+  initialQuality: 0.8,      // Starting quality (library iterates if needed)
+};
+
+// ─── API response shape (mirrors route.ts) ────────────────────────────────────
+
+interface PresignedUrlResponse {
+  originalUploadUrl: string;
+  originalKey: string;
+  previewUploadUrl: string;
+  previewKey: string;
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useUpload(): UseUploadReturn {
+  const [status, setStatus] = useState<UploadStatus>("idle");
+  const [progress, setProgress] = useState<number>(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const reset = useCallback(() => {
+    setStatus("idle");
+    setProgress(0);
+    setError(null);
+  }, []);
+
+  const upload = useCallback(async (file: File): Promise<UploadResult> => {
+    setError(null);
+    setProgress(0);
+
+    try {
+      // ── Step 1: Compress the image to a WebP thumbnail ──────────────────────
+      //
+      // This runs in a Web Worker via `browser-image-compression`, so it won't
+      // freeze the UI even for large source files.
+      //
+      // Non-image files (e.g. videos) are skipped — we pass them through as-is
+      // for the original, and there's no preview generated for video.
+      let previewBlob: Blob | null = null;
+
+      if (file.type.startsWith("image/")) {
+        setStatus("compressing");
+        // Compress to a lightweight WebP thumbnail
+        previewBlob = await imageCompression(file, PREVIEW_COMPRESSION_OPTIONS);
+      }
+
+      // ── Step 2: Request presigned URLs from the Next.js API ─────────────────
+      setStatus("requesting_urls");
+
+      const apiResponse = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileType: file.type,
+        }),
+      });
+
+      if (!apiResponse.ok) {
+        const { error: apiError } = (await apiResponse.json()) as {
+          error?: string;
+        };
+        throw new Error(apiError ?? "Failed to get presigned upload URLs.");
+      }
+
+      const {
+        originalUploadUrl,
+        originalKey,
+        previewUploadUrl,
+        previewKey,
+      } = (await apiResponse.json()) as {
+        originalUploadUrl: string;
+        originalKey: string;
+        previewUploadUrl: string | null;
+        previewKey: string | null;
+      };
+
+      // ── Step 3: Upload files directly to R2 in parallel ────────────────
+      //
+      // Using XMLHttpRequest for the original gives us real `progress` events.
+      // The preview is small, so a plain fetch() is fine there.
+      setStatus("uploading");
+      setProgress(0);
+
+      const uploadPromises: Promise<any>[] = [
+        // Upload the original with progress tracking
+        uploadWithProgress(
+          originalUploadUrl,
+          file,
+          file.type,
+          (pct) => setProgress(pct)
+        )
+      ];
+
+      // Upload the compressed preview if available
+      if (previewUploadUrl && previewBlob) {
+        uploadPromises.push(
+          fetch(previewUploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": "image/webp" },
+            body: previewBlob,
+          }).then((res) => {
+            if (!res.ok) {
+              throw new Error(
+                `Preview upload failed with status ${res.status}.`
+              );
+            }
+          })
+        );
+      }
+
+      await Promise.all(uploadPromises);
+
+      // ── Step 4: Return the keys so the caller can save them to the DB ────────
+      setStatus("success");
+      setProgress(100);
+
+      return { originalKey, previewKey: previewKey || "" };
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "An unknown upload error occurred.";
+      setError(message);
+      setStatus("error");
+
+      // Re-throw so the calling component can also react (e.g. show a toast)
+      throw new Error(message);
+    }
+  }, []);
+
+  return { upload, status, progress, error, reset };
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Uploads `body` to `url` via a presigned PUT request, reporting integer
+ * progress (0–100) through the `onProgress` callback.
+ *
+ * We use XMLHttpRequest instead of fetch() because the Fetch API does not yet
+ * expose upload progress in a cross-browser way (the `duplex: "half"` + body
+ * ReadableStream approach is not universally supported).
+ */
+function uploadWithProgress(
+  url: string,
+  body: Blob,
+  contentType: string,
+  onProgress: (percent: number) => void
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    // Report progress as a 0–100 integer
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) {
+        const pct = Math.round((event.loaded / event.total) * 100);
+        onProgress(pct);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `Original upload failed: HTTP ${xhr.status} ${xhr.statusText}`
+          )
+        );
+      }
+    });
+
+    xhr.addEventListener("error", () =>
+      reject(new Error("Original upload failed due to a network error."))
+    );
+    xhr.addEventListener("abort", () =>
+      reject(new Error("Original upload was aborted."))
+    );
+
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.send(body);
+  });
+}

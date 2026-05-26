@@ -1,0 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Gallery {
+  id        String      @id @default(cuid())
+  slug      String      @unique
+  title     String
+  expiresAt DateTime?   @map("expires_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  items     MediaItem[]
+
+  @@index([slug])
+  @@map("galleries")
+}
+
+model MediaItem {
+  id            String   @id @default(cuid())
+  galleryId     String   @map("gallery_id")
+  originalR2Key String   @map("original_r2_key")
+  previewR2Key  String?  @map("preview_r2_key")
+  fileType      String   @map("file_type")
+  sizeBytes     BigInt   @map("size_bytes")
+  width         Int?
+  height        Int?
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  gallery       Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+
+  @@index([galleryId, sortOrder])
+  @@map("media_items")
+}
