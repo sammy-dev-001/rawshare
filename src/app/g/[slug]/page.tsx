@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { ShieldAlert, Calendar } from "lucide-react";
@@ -136,6 +137,15 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
           r2PublicUrl={r2PublicUrl} 
           galleryTitle={gallery.title} 
         />
+
+        <div className="mt-24 pb-8 flex justify-center">
+          <Link 
+            href="/" 
+            className="flex items-center gap-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors bg-zinc-900/80 hover:bg-zinc-800 px-6 py-3 rounded-full border border-zinc-800"
+          >
+            Create your own RawShare gallery
+          </Link>
+        </div>
       </main>
     </div>
   );
