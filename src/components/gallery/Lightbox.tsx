@@ -15,6 +15,7 @@ import {
   Maximize2,
   Minimize2,
 } from "lucide-react";
+import { saveAs } from "file-saver";
 
 // Internationalized string constants to prevent linter warnings
 const TEXT_DOUBLE_TAP_TO_SHRINK = "Double tap to shrink";
@@ -110,20 +111,17 @@ export function Lightbox({
     e.stopPropagation();
     try {
       const response = await fetch(originalUrl);
+      if (!response.ok) throw new Error("Network response was not ok");
       const blob = await response.blob();
       const filename = getFileName(activeItem.originalKey);
       
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
+      saveAs(blob, filename);
     } catch (error) {
       console.error("Failed to download original image:", error);
-      // Fallback: open in new tab
-      window.open(originalUrl, "_blank");
+      // Fallback: iOS popup blockers block window.open in async callbacks.
+      // Using window.location.href navigates the current tab so the user 
+      // can long-press and "Save Image".
+      window.location.href = originalUrl;
     }
   };
 
