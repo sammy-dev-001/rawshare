@@ -47,6 +47,11 @@ export const r2Client = new S3Client({
     accessKeyId,
     secretAccessKey,
   },
+  // AWS SDK v3 now injects CRC32 checksums into presigned URLs by default.
+  // Cloudflare R2 does not support these and returns 400 Bad Request.
+  // Setting both to "when_required" disables the automatic checksum behaviour.
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
 });
 
 /** The name of the R2 bucket, used in every PutObject / GetObject command. */
