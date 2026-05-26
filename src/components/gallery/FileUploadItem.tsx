@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useUpload, UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { motion } from "framer-motion";
-import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon, RefreshCcw } from "lucide-react";
 
 interface FileUploadItemProps {
   file: File;
@@ -15,7 +15,7 @@ interface FileUploadItemProps {
 }
 
 export function FileUploadItem({ file, onComplete, onError, startUpload, quality }: FileUploadItemProps) {
-  const { upload, status, progress, error } = useUpload();
+  const { upload, status, progress, error, reset } = useUpload();
   const [hasStarted, setHasStarted] = useState(false);
   
   // Preview URL for local display
@@ -88,7 +88,24 @@ export function FileUploadItem({ file, onComplete, onError, startUpload, quality
           </div>
         </div>
         
-        {error && <span className="mt-1 text-xs text-red-400 truncate">{error}</span>}
+        {error && (
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-red-400 truncate flex-1">{error}</span>
+            <button
+              onClick={() => {
+                reset();
+                setHasStarted(true);
+                upload(file, { quality })
+                  .then((result) => onComplete({ ...result, file }))
+                  .catch((err) => onError(err.message));
+              }}
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 hover:text-white transition-colors bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded-lg shrink-0"
+            >
+              <RefreshCcw className="h-3 w-3" />
+              Retry
+            </button>
+          </div>
+        )}
       </div>
     </motion.div>
   );
