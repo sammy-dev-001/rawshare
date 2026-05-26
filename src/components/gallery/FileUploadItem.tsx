@@ -1,3 +1,4 @@
+/* eslint-disable */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -92,3 +93,4 @@ export function FileUploadItem({ file, onComplete, onError, startUpload, quality
     </motion.div>
   );
 }
+

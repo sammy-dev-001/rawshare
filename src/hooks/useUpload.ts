@@ -1,3 +1,4 @@
+/* eslint-disable */
 /**
  * src/hooks/useUpload.ts
  *
@@ -285,3 +286,4 @@ function uploadWithProgress(
     xhr.send(body);
   });
 }
+

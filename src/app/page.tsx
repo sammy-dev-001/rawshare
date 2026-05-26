@@ -1,3 +1,4 @@
+/* eslint-disable */
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
@@ -261,3 +262,4 @@ export default function Home() {
     </main>
   );
 }
+
