@@ -1,3 +1,4 @@
+import { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
@@ -8,6 +9,52 @@ interface GalleryPageProps {
   params: Promise<{
     slug: string;
   }>;
+}
+
+export async function generateMetadata({ params }: GalleryPageProps): Promise<Metadata> {
+  const { slug } = await params;
+  
+  const gallery = await prisma.gallery.findUnique({
+    where: { slug },
+    include: {
+      items: {
+        orderBy: { sortOrder: "asc" },
+        take: 1, // We only need the first item for the OG image
+      },
+    },
+  });
+
+  if (!gallery) {
+    return {
+      title: "Gallery Not Found | RawShare",
+    };
+  }
+
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
+  let ogImageUrl = "";
+  
+  if (gallery.items.length > 0) {
+    const firstItem = gallery.items[0];
+    const key = firstItem.previewR2Key || firstItem.originalR2Key;
+    ogImageUrl = `${r2PublicUrl}/${key}`;
+  }
+
+  return {
+    title: `${gallery.title} | RawShare`,
+    description: `View ${gallery.title} on RawShare. Shared instantly, no compression.`,
+    openGraph: {
+      title: `${gallery.title} | RawShare`,
+      description: `View ${gallery.title} on RawShare. Shared instantly, no compression.`,
+      images: ogImageUrl ? [ogImageUrl] : [],
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${gallery.title} | RawShare`,
+      description: `View ${gallery.title} on RawShare. Shared instantly, no compression.`,
+      images: ogImageUrl ? [ogImageUrl] : [],
+    },
+  };
 }
 
 export default async function GalleryPage({ params }: GalleryPageProps) {
