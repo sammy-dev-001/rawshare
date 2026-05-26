@@ -4,31 +4,47 @@ import React, { useState } from "react";
 import { Share2, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function ShareButton() {
-  const [copied, setCopied] = useState(false);
+interface ShareButtonProps {
+  galleryTitle?: string;
+}
 
-  const handleCopy = async () => {
+export default function ShareButton({ galleryTitle }: ShareButtonProps) {
+  const [state, setState] = useState<"idle" | "copied">("idle");
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    const title = galleryTitle ? `${galleryTitle} | RawShare` : "RawShare";
+    const text = galleryTitle
+      ? `Check out "${galleryTitle}" on RawShare`
+      : "Check out this gallery on RawShare";
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title, text, url });
+        return;
+      } catch (err) {
+        if ((err as DOMException).name === "AbortError") return;
+      }
+    }
+
     try {
       if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(window.location.href);
+        await navigator.clipboard.writeText(url);
       } else {
-        // Fallback for older browsers or when document is not focused (like in some dev tools)
         const textArea = document.createElement("textarea");
-        textArea.value = window.location.href;
+        textArea.value = url;
         textArea.style.position = "absolute";
         textArea.style.left = "-999999px";
         document.body.prepend(textArea);
         textArea.select();
         try {
           document.execCommand("copy");
-        } catch (error) {
-          console.error("Fallback copy failed", error);
         } finally {
           textArea.remove();
         }
       }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setState("copied");
+      setTimeout(() => setState("idle"), 2000);
     } catch (err) {
       console.error("Failed to copy link:", err);
     }
@@ -36,11 +52,11 @@ export default function ShareButton() {
 
   return (
     <button
-      onClick={handleCopy}
+      onClick={handleShare}
       className="flex items-center justify-center gap-2 rounded-full bg-zinc-900 border border-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
     >
       <AnimatePresence mode="wait" initial={false}>
-        {copied ? (
+        {state === "copied" ? (
           <motion.div
             key="check"
             initial={{ opacity: 0, scale: 0.5 }}
@@ -62,7 +78,7 @@ export default function ShareButton() {
           </motion.div>
         )}
       </AnimatePresence>
-      <span>{copied ? "Copied!" : "Share"}</span>
+      <span>{state === "copied" ? "Copied!" : "Share"}</span>
     </button>
   );
 }

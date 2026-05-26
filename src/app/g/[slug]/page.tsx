@@ -125,7 +125,7 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
             <div className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 rounded-full font-semibold hidden sm:block">
               {serializedItems.length} {serializedItems.length === 1 ? 'item' : 'items'}
             </div>
-            <ShareButton />
+            <ShareButton galleryTitle={gallery.title} />
           </div>
         </div>
       </header>
