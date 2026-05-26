@@ -37,6 +37,13 @@ export interface UploadResult {
   previewKey: string;
 }
 
+/** The quality settings for uploading original images. */
+export type UploadQuality = "original" | "high" | "standard";
+
+export interface UploadOptions {
+  quality?: UploadQuality;
+}
+
 /** Granular upload state exposed to the UI. */
 export type UploadStatus =
   | "idle"
@@ -48,7 +55,7 @@ export type UploadStatus =
 
 export interface UseUploadReturn {
   /** Upload a single file. Returns the R2 keys on success. */
-  upload: (file: File) => Promise<UploadResult>;
+  upload: (file: File, options?: UploadOptions) => Promise<UploadResult>;
   /** Granular status of the current upload. */
   status: UploadStatus;
   /** Upload progress as a 0–100 integer (covers the PUT-to-R2 phase). */
@@ -75,6 +82,20 @@ const PREVIEW_COMPRESSION_OPTIONS: Parameters<typeof imageCompression>[1] = {
   initialQuality: 0.8,      // Starting quality (library iterates if needed)
 };
 
+const HIGH_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
+  maxSizeMB: 3,
+  maxWidthOrHeight: 2560,
+  useWebWorker: true,
+  initialQuality: 0.85,
+};
+
+const STANDARD_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
+  maxSizeMB: 1.5,
+  maxWidthOrHeight: 1920,
+  useWebWorker: true,
+  initialQuality: 0.75,
+};
+
 // ─── API response shape (mirrors route.ts) ────────────────────────────────────
 
 interface PresignedUrlResponse {
@@ -97,7 +118,7 @@ export function useUpload(): UseUploadReturn {
     setError(null);
   }, []);
 
-  const upload = useCallback(async (file: File): Promise<UploadResult> => {
+  const upload = useCallback(async (file: File, options?: UploadOptions): Promise<UploadResult> => {
     setError(null);
     setProgress(0);
 
@@ -110,10 +131,20 @@ export function useUpload(): UseUploadReturn {
       // Non-image files (e.g. videos) are skipped — we pass them through as-is
       // for the original, and there's no preview generated for video.
       let previewBlob: Blob | null = null;
+      let originalBlob: Blob = file;
 
       if (file.type.startsWith("image/")) {
         setStatus("compressing");
-        // Compress to a lightweight WebP thumbnail
+        
+        // 1a: Compress original image based on quality setting
+        const quality = options?.quality || "original";
+        if (quality === "high") {
+          originalBlob = await imageCompression(file, HIGH_QUALITY_OPTIONS);
+        } else if (quality === "standard") {
+          originalBlob = await imageCompression(file, STANDARD_QUALITY_OPTIONS);
+        }
+
+        // 1b: Compress to a lightweight WebP thumbnail
         previewBlob = await imageCompression(file, PREVIEW_COMPRESSION_OPTIONS);
       }
 
@@ -159,7 +190,7 @@ export function useUpload(): UseUploadReturn {
         // Upload the original with progress tracking
         uploadWithProgress(
           originalUploadUrl,
-          file,
+          originalBlob,
           file.type,
           (pct) => setProgress(pct)
         )

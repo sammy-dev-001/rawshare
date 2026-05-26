@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { UploadDropzone } from "@/components/gallery/UploadDropzone";
 import { FileUploadItem } from "@/components/gallery/FileUploadItem";
-import { UploadResult } from "@/hooks/useUpload";
+import { UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowRight, Loader2, Image as ImageIcon } from "lucide-react";
@@ -17,6 +17,13 @@ export default function Home() {
   const [isCreatingGallery, setIsCreatingGallery] = useState(false);
   const [completedUploads, setCompletedUploads] = useState<(UploadResult & { file: File })[]>([]);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [quality, setQuality] = useState<UploadQuality>("high");
+
+  const QUALITY_OPTIONS: { id: UploadQuality; label: string; desc: string }[] = [
+    { id: "standard", label: "Standard", desc: "Fast upload, smaller sizes (~1.5MB max)" },
+    { id: "high", label: "High", desc: "Great balance of quality and size (~3MB max)" },
+    { id: "original", label: "Original", desc: "Raw untouched files" },
+  ];
 
   const handleFilesSelected = useCallback((selectedFiles: File[]) => {
     setFiles(selectedFiles);
@@ -51,7 +58,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: title || "Untitled Gallery",
+          title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
           items: completedUploads.map((u) => ({
             originalKey: u.originalKey,
             previewKey: u.previewKey,
@@ -156,11 +163,45 @@ export default function Home() {
                       <FileUploadItem
                         key={`${file.name}-${i}`}
                         file={file}
+                        quality={quality}
                         startUpload={isUploading}
                         onComplete={handleUploadComplete}
                         onError={handleUploadError}
                       />
                     ))}
+                  </div>
+
+                  <div className="pt-4 border-t border-zinc-800/50">
+                    <label className="block text-sm font-medium text-zinc-400 mb-3">
+                      Upload Quality (Images only)
+                    </label>
+                    <div className="flex gap-2 p-1 bg-zinc-950 border border-zinc-800 rounded-xl relative">
+                      {QUALITY_OPTIONS.map((opt) => {
+                        const isActive = quality === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => setQuality(opt.id)}
+                            disabled={isUploading}
+                            className={`flex-1 relative py-2.5 px-3 text-sm font-medium rounded-lg transition-colors z-10 ${
+                              isActive ? "text-white" : "text-zinc-500 hover:text-zinc-300"
+                            } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            {isActive && (
+                              <motion.div
+                                layoutId="quality-active"
+                                className="absolute inset-0 bg-zinc-800 rounded-lg -z-10 shadow-sm"
+                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
+                              />
+                            )}
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-zinc-500 mt-2.5 ml-1">
+                      {QUALITY_OPTIONS.find((o) => o.id === quality)?.desc}
+                    </p>
                   </div>
 
                   <div className="pt-4 border-t border-zinc-800/50">
@@ -170,7 +211,7 @@ export default function Home() {
                     <input
                       id="title"
                       type="text"
-                      placeholder="e.g. Summer Trip 2026"
+                      placeholder={`e.g. Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
                       disabled={isUploading}

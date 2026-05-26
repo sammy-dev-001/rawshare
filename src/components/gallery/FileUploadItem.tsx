@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUpload, UploadResult } from "@/hooks/useUpload";
+import { useUpload, UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { motion } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon } from "lucide-react";
 
@@ -10,9 +10,10 @@ interface FileUploadItemProps {
   onComplete: (result: UploadResult & { file: File }) => void;
   onError: (error: string) => void;
   startUpload: boolean;
+  quality: UploadQuality;
 }
 
-export function FileUploadItem({ file, onComplete, onError, startUpload }: FileUploadItemProps) {
+export function FileUploadItem({ file, onComplete, onError, startUpload, quality }: FileUploadItemProps) {
   const { upload, status, progress, error } = useUpload();
   const [hasStarted, setHasStarted] = useState(false);
   
@@ -31,11 +32,11 @@ export function FileUploadItem({ file, onComplete, onError, startUpload }: FileU
   useEffect(() => {
     if (startUpload && !hasStarted && status === "idle") {
       setHasStarted(true);
-      upload(file)
+      upload(file, { quality })
         .then((result) => onComplete({ ...result, file }))
         .catch((err) => onError(err.message));
     }
-  }, [startUpload, hasStarted, status, upload, file, onComplete, onError]);
+  }, [startUpload, hasStarted, status, upload, file, onComplete, onError, quality]);
 
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
