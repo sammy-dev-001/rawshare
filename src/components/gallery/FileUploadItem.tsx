@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useUpload, UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { motion, Reorder } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon, RefreshCcw, X, GripVertical } from "lucide-react";
@@ -78,14 +78,20 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
     }
   }, [startUpload, hasStarted, status, upload, file, onComplete, onError, quality, item.id]);
 
-  // Clean up on unmount
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  // Clean up only on unmount
   useEffect(() => {
     return () => {
-      if (status === "uploading" || status === "compressing" || status === "requesting_urls") {
+      const s = statusRef.current;
+      if (s === "uploading" || s === "compressing" || s === "requesting_urls") {
         abort();
       }
     };
-  }, [status, abort]);
+  }, [abort]);
 
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
