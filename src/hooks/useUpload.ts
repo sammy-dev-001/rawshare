@@ -25,7 +25,7 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, MutableRefObject } from "react";
 import imageCompression from "browser-image-compression";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,7 +52,8 @@ export type UploadStatus =
   | "requesting_urls"
   | "uploading"
   | "success"
-  | "error";
+  | "error"
+  | "aborted";
 
 export interface UseUploadReturn {
   /** Upload a single file. Returns the R2 keys on success. */
@@ -65,6 +66,8 @@ export interface UseUploadReturn {
   error: string | null;
   /** Reset state back to "idle" (useful after showing an error). */
   reset: () => void;
+  /** Abort the ongoing upload. */
+  abort: () => void;
 }
 
 // ─── Preview compression options ─────────────────────────────────────────────
@@ -113,6 +116,10 @@ export function useUpload(): UseUploadReturn {
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
 
+  // Keep track of ongoing requests to allow cancellation
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
+
   const reset = useCallback(() => {
     setStatus("idle");
     setProgress(0);
@@ -122,6 +129,8 @@ export function useUpload(): UseUploadReturn {
   const upload = useCallback(async (file: File, options?: UploadOptions): Promise<UploadResult> => {
     setError(null);
     setProgress(0);
+    
+    abortControllerRef.current = new AbortController();
 
     try {
       // ── Step 1: Compress the image to a WebP thumbnail ──────────────────────
@@ -159,6 +168,7 @@ export function useUpload(): UseUploadReturn {
           fileName: file.name,
           fileType: file.type,
         }),
+        signal: abortControllerRef.current.signal,
       });
 
       if (!apiResponse.ok) {
@@ -193,7 +203,8 @@ export function useUpload(): UseUploadReturn {
           originalUploadUrl,
           originalBlob,
           file.type,
-          (pct) => setProgress(pct)
+          (pct) => setProgress(pct),
+          xhrRef
         )
       ];
 
@@ -204,6 +215,7 @@ export function useUpload(): UseUploadReturn {
             method: "PUT",
             headers: { "Content-Type": "image/webp" },
             body: previewBlob,
+            signal: abortControllerRef.current?.signal,
           }).then((res) => {
             if (!res.ok) {
               throw new Error(
@@ -222,6 +234,12 @@ export function useUpload(): UseUploadReturn {
 
       return { originalKey, previewKey: previewKey || "" };
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setStatus("aborted");
+        setError("Upload aborted.");
+        throw err;
+      }
+
       const message =
         err instanceof Error ? err.message : "An unknown upload error occurred.";
       setError(message);
@@ -232,7 +250,18 @@ export function useUpload(): UseUploadReturn {
     }
   }, []);
 
-  return { upload, status, progress, error, reset };
+  const abort = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+    }
+    setStatus("aborted");
+    setError("Upload aborted.");
+  }, []);
+
+  return { upload, status, progress, error, reset, abort };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -249,10 +278,14 @@ function uploadWithProgress(
   url: string,
   body: Blob,
   contentType: string,
-  onProgress: (percent: number) => void
+  onProgress: (percent: number) => void,
+  xhrRef?: MutableRefObject<XMLHttpRequest | null>
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    if (xhrRef) {
+      xhrRef.current = xhr;
+    }
 
     // Report progress as a 0–100 integer
     xhr.upload.addEventListener("progress", (event) => {
@@ -277,9 +310,11 @@ function uploadWithProgress(
     xhr.addEventListener("error", () =>
       reject(new Error("Original upload failed due to a network error."))
     );
-    xhr.addEventListener("abort", () =>
-      reject(new Error("Original upload was aborted."))
-    );
+    xhr.addEventListener("abort", () => {
+      const err = new Error("Original upload was aborted.");
+      err.name = "AbortError";
+      reject(err);
+    });
 
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", contentType);

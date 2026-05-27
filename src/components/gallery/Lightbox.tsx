@@ -15,7 +15,6 @@ import {
   Maximize2,
   Minimize2,
 } from "lucide-react";
-import { saveAs } from "file-saver";
 
 // Internationalized string constants to prevent linter warnings
 const TEXT_DOUBLE_TAP_TO_SHRINK = "Double tap to shrink";
@@ -110,17 +109,25 @@ export function Lightbox({
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const response = await fetch(originalUrl);
-      if (!response.ok) throw new Error("Network response was not ok");
-      const blob = await response.blob();
       const filename = getFileName(activeItem.originalKey);
       
-      saveAs(blob, filename);
+      // Request a presigned download URL from our API
+      // The API forces the Content-Disposition: attachment header.
+      const response = await fetch(`/api/download-url?key=${encodeURIComponent(activeItem.originalKey)}&filename=${encodeURIComponent(filename)}`);
+      
+      if (!response.ok) {
+        throw new Error("Failed to get download URL");
+      }
+      
+      const { url } = await response.json();
+      
+      // Navigate to the presigned URL directly. 
+      // Because it has Content-Disposition: attachment, it won't navigate away;
+      // it will simply trigger the native iOS "Do you want to download..." dialog!
+      window.location.href = url;
     } catch (error) {
       console.error("Failed to download original image:", error);
-      // Fallback: iOS popup blockers block window.open in async callbacks.
-      // Using window.location.href navigates the current tab so the user 
-      // can long-press and "Save Image".
+      // Fallback: direct link to original url
       window.location.href = originalUrl;
     }
   };
