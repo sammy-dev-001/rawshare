@@ -5,7 +5,7 @@ import { FileUploadItem } from "@/components/gallery/FileUploadItem";
 import { UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { useRouter } from "next/navigation";
 import { motion, Reorder } from "framer-motion";
-import { ArrowRight, Loader2, RefreshCcw } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCcw, Plus } from "lucide-react";
 
 export interface UploadQueueItem {
   id: string;
@@ -18,9 +18,9 @@ interface UploadManagerProps {
 }
 
 const QUALITY_OPTIONS: { id: UploadQuality; label: string; desc: string }[] = [
-  { id: "standard", label: "Standard", desc: "Fast upload, smaller sizes (~1.5MB max)" },
-  { id: "high", label: "High", desc: "Great balance of quality and size (~3MB max)" },
-  { id: "original", label: "Original", desc: "Raw untouched files" },
+  { id: "standard", label: "Standard", desc: "Good balance, smaller sizes (~5MB max)" },
+  { id: "high", label: "High", desc: "High quality retention (~10MB max)" },
+  { id: "original", label: "Original", desc: "Raw untouched files (may consume more data)" },
 ];
 
 export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
@@ -35,7 +35,7 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingGallery, setIsCreatingGallery] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
-  const [quality, setQuality] = useState<UploadQuality>("high");
+  const [quality, setQuality] = useState<UploadQuality>("original");
 
   // State to track completed uploads map (id -> result)
   const [completedResults, setCompletedResults] = useState<Record<string, UploadResult>>({});
@@ -195,9 +195,31 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
       className="flex flex-col space-y-6"
     >
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-white">
-          {items.length} {items.length === 1 ? "file" : "files"} selected
-        </h3>
+        <div className="flex items-center gap-3">
+          <h3 className="text-lg font-medium text-white">
+            {items.length} {items.length === 1 ? "file" : "files"} selected
+          </h3>
+          <label className="cursor-pointer bg-white/10 hover:bg-white/20 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5" title="Add more files">
+            <Plus size={14} />
+            <span className="hidden sm:inline">Add</span>
+            <input 
+              type="file" 
+              multiple 
+              accept="image/*,video/*"
+              className="hidden" 
+              onChange={(e) => {
+                if (e.target.files) {
+                  const newFiles = Array.from(e.target.files);
+                  setItems(prev => [
+                    ...prev,
+                    ...newFiles.map(file => ({ id: Math.random().toString(36).slice(2, 9), file }))
+                  ]);
+                }
+                e.target.value = "";
+              }} 
+            />
+          </label>
+        </div>
         {!isUploading && (
           <button 
             onClick={onClear}

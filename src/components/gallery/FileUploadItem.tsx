@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useUpload, UploadResult, UploadQuality } from "@/hooks/useUpload";
+import { useUpload, UploadResult, UploadQuality, HIGH_QUALITY_OPTIONS, STANDARD_QUALITY_OPTIONS } from "@/hooks/useUpload";
+import imageCompression from "browser-image-compression";
 import { motion, Reorder } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon, RefreshCcw, X, GripVertical } from "lucide-react";
 import { UploadQueueItem } from "./UploadManager";
@@ -18,11 +19,41 @@ interface FileUploadItemProps {
 
 export function FileUploadItem({ item, onComplete, onError, onRemove, startUpload, isUploadingBatch, quality }: FileUploadItemProps) {
   const file = item.file;
-  const { upload, status, progress, error, reset, abort } = useUpload();
+  const { upload, status, progress, error, reset, abort, compressedSize } = useUpload();
   const [hasStarted, setHasStarted] = useState(false);
   
   // Preview URL for local display
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const [precompressedBlob, setPrecompressedBlob] = useState<Blob | null>(null);
+  const [isPrecompressing, setIsPrecompressing] = useState(false);
+
+  useEffect(() => {
+    if (!file.type.startsWith("image/")) return;
+    if (quality === "original") {
+      setPrecompressedBlob(null);
+      return;
+    }
+    
+    let isActive = true;
+    const compute = async () => {
+      setIsPrecompressing(true);
+      try {
+        const options = quality === "high" ? HIGH_QUALITY_OPTIONS : STANDARD_QUALITY_OPTIONS;
+        const blob = await imageCompression(file, options);
+        if (isActive) {
+          setPrecompressedBlob(blob);
+        }
+      } catch (e) {
+        // Ignore pre-compression errors
+      } finally {
+        if (isActive) setIsPrecompressing(false);
+      }
+    };
+    compute();
+    
+    return () => { isActive = false; };
+  }, [file, quality]);
 
   useEffect(() => {
     // Generate a local preview URL if it's an image
@@ -72,26 +103,16 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
   useEffect(() => {
     if (startUpload && !hasStarted && status === "idle") {
       setTimeout(() => setHasStarted(true), 0);
-      upload(file, { quality })
+      upload(file, { quality, precompressedBlob: precompressedBlob || undefined })
         .then((result) => onComplete(item.id, result))
         .catch((err) => onError(item.id, err.message));
     }
-  }, [startUpload, hasStarted, status, upload, file, onComplete, onError, quality, item.id]);
+  }, [startUpload, hasStarted, status, upload, file, onComplete, onError, quality, item.id, precompressedBlob]);
 
   const statusRef = useRef(status);
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
-
-  // Clean up only on unmount
-  useEffect(() => {
-    return () => {
-      const s = statusRef.current;
-      if (s === "uploading" || s === "compressing" || s === "requesting_urls") {
-        abort();
-      }
-    };
-  }, [abort]);
 
   const isImage = file.type.startsWith("image/");
   const isVideo = file.type.startsWith("video/");
@@ -131,7 +152,16 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
             {file.name}
           </span>
           <span className="text-xs text-zinc-500 shrink-0">
-            {(file.size / (1024 * 1024)).toFixed(1)} MB
+            {isPrecompressing && !compressedSize && status === "idle" ? (
+              <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> calculating...</span>
+            ) : (() => {
+              const bytes = compressedSize || precompressedBlob?.size || file.size;
+              if (bytes === 0) return '0 B';
+              const k = 1024;
+              const sizes = ['B', 'KB', 'MB', 'GB'];
+              const i = Math.floor(Math.log(bytes) / Math.log(k));
+              return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            })()}
           </span>
         </div>
 
@@ -162,7 +192,7 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
               onClick={() => {
                 reset();
                 setHasStarted(true);
-                upload(file, { quality })
+                upload(file, { quality, precompressedBlob: precompressedBlob || undefined })
                   .then((result) => onComplete(item.id, result))
                   .catch((err) => onError(item.id, err.message));
               }}

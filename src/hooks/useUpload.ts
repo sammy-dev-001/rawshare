@@ -43,6 +43,7 @@ export type UploadQuality = "original" | "high" | "standard";
 
 export interface UploadOptions {
   quality?: UploadQuality;
+  precompressedBlob?: Blob;
 }
 
 /** Granular upload state exposed to the UI. */
@@ -68,6 +69,8 @@ export interface UseUploadReturn {
   reset: () => void;
   /** Abort the ongoing upload. */
   abort: () => void;
+  /** The size of the file after compression. */
+  compressedSize: number | null;
 }
 
 // ─── Preview compression options ─────────────────────────────────────────────
@@ -86,16 +89,16 @@ const PREVIEW_COMPRESSION_OPTIONS: Parameters<typeof imageCompression>[1] = {
   initialQuality: 0.8,      // Starting quality (library iterates if needed)
 };
 
-const HIGH_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
-  maxSizeMB: 3,
-  maxWidthOrHeight: 2560,
+export const HIGH_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
+  maxSizeMB: 10,
+  maxWidthOrHeight: 3840,
   useWebWorker: true,
   initialQuality: 0.85,
 };
 
-const STANDARD_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
-  maxSizeMB: 1.5,
-  maxWidthOrHeight: 1920,
+export const STANDARD_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = {
+  maxSizeMB: 5,
+  maxWidthOrHeight: 2560,
   useWebWorker: true,
   initialQuality: 0.75,
 };
@@ -115,6 +118,7 @@ export function useUpload(): UseUploadReturn {
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [progress, setProgress] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
+  const [compressedSize, setCompressedSize] = useState<number | null>(null);
 
   // Keep track of ongoing requests to allow cancellation
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -124,6 +128,7 @@ export function useUpload(): UseUploadReturn {
     setStatus("idle");
     setProgress(0);
     setError(null);
+    setCompressedSize(null);
   }, []);
 
   const upload = useCallback(async (file: File, options?: UploadOptions): Promise<UploadResult> => {
@@ -147,16 +152,22 @@ export function useUpload(): UseUploadReturn {
         setStatus("compressing");
         
         // 1a: Compress original image based on quality setting
-        const quality = options?.quality || "original";
-        if (quality === "high") {
-          originalBlob = await imageCompression(file, HIGH_QUALITY_OPTIONS);
-        } else if (quality === "standard") {
-          originalBlob = await imageCompression(file, STANDARD_QUALITY_OPTIONS);
+        if (options?.precompressedBlob) {
+          originalBlob = options.precompressedBlob;
+        } else {
+          const quality = options?.quality || "original";
+          if (quality === "high") {
+            originalBlob = await imageCompression(file, HIGH_QUALITY_OPTIONS);
+          } else if (quality === "standard") {
+            originalBlob = await imageCompression(file, STANDARD_QUALITY_OPTIONS);
+          }
         }
 
         // 1b: Compress to a lightweight WebP thumbnail
         previewBlob = await imageCompression(file, PREVIEW_COMPRESSION_OPTIONS);
       }
+
+      setCompressedSize(originalBlob.size);
 
       // ── Step 2: Request presigned URLs from the Next.js API ─────────────────
       setStatus("requesting_urls");
@@ -261,7 +272,7 @@ export function useUpload(): UseUploadReturn {
     setError("Upload aborted.");
   }, []);
 
-  return { upload, status, progress, error, reset, abort };
+  return { upload, status, progress, error, reset, abort, compressedSize };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
