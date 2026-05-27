@@ -209,7 +209,21 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
       </div>
 
       <div className="max-h-[40vh] overflow-y-auto space-y-2 pr-2 scrollbar-thin scrollbar-thumb-zinc-800">
-        <Reorder.Group axis="y" values={items} onReorder={setItems} className="space-y-2">
+        <Reorder.Group 
+          axis="y" 
+          values={items} 
+          onReorder={setItems} 
+          className="space-y-2"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: { opacity: 0 },
+            visible: {
+              opacity: 1,
+              transition: { staggerChildren: 0.05 }
+            }
+          }}
+        >
           {items.map((item) => (
             <FileUploadItem
               key={item.id}

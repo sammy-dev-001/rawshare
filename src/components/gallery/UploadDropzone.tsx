@@ -83,12 +83,12 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = fals
   return (
     <div className="w-full">
       <motion.div
-        className={`relative overflow-hidden rounded-3xl border-2 border-dashed transition-colors duration-300 ${
+        className={`relative overflow-hidden rounded-3xl border-2 transition-all duration-300 ${
           disabled
-            ? "border-zinc-800 bg-zinc-900/50 cursor-not-allowed opacity-60"
+            ? "border-zinc-800 border-dashed bg-zinc-900/50 cursor-not-allowed opacity-60"
             : isDragActive
-            ? "border-white bg-zinc-800/80 cursor-copy"
-            : "border-zinc-800 bg-zinc-900/40 hover:bg-zinc-800/60 hover:border-zinc-700 cursor-pointer"
+            ? "border-indigo-400 border-solid bg-indigo-500/10 shadow-[0_0_30px_rgba(129,140,248,0.3)] cursor-copy"
+            : "border-zinc-800 border-dashed bg-zinc-900/40 hover:bg-zinc-800/60 hover:border-zinc-600 cursor-pointer"
         }`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -149,9 +149,16 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = fals
         </div>
         
         {/* Glow effect behind dropzone */}
-        {isDragActive && (
-          <div className="absolute inset-0 -z-10 bg-white/5 blur-2xl rounded-full pointer-events-none" />
-        )}
+        <AnimatePresence>
+          {isDragActive && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl rounded-full pointer-events-none" 
+            />
+          )}
+        </AnimatePresence>
       </motion.div>
 
       <AnimatePresence>

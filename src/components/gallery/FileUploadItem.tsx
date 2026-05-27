@@ -96,8 +96,12 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
     <Reorder.Item 
       value={item}
       id={item.id}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
+      variants={{
+        hidden: { opacity: 0, y: 10 },
+        visible: { opacity: 1, y: 0 }
+      }}
+      initial="hidden"
+      animate="visible"
       exit={{ opacity: 0, scale: 0.95 }}
       className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 relative group"
     >
@@ -126,9 +130,9 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-1.5 flex-1 rounded-full bg-zinc-800/50">
             <motion.div
-              className="h-full bg-white"
+              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ ease: "linear", duration: 0.2 }}
