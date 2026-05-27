@@ -115,15 +115,23 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
   }));
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-zinc-800">
-      <header className="border-b border-zinc-900/80 bg-zinc-950/80 sticky top-0 z-40 backdrop-blur-md">
+    <div className="min-h-screen bg-black text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 relative">
+      
+      {/* Ambient Background Glows */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-900/15 blur-[120px] mix-blend-screen" />
+        <div className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-purple-900/15 blur-[120px] mix-blend-screen" />
+        <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-emerald-900/10 blur-[120px] mix-blend-screen" />
+      </div>
+
+      <header className="border-b border-white/5 bg-black/40 sticky top-0 z-40 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Shared Gallery</span>
             <h1 className="text-lg font-bold tracking-tight text-white">{gallery.title}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 px-3.5 py-1.5 rounded-full font-semibold hidden sm:block">
+            <div className="text-xs text-zinc-400 bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-full font-semibold hidden sm:block">
               {serializedItems.length} {serializedItems.length === 1 ? 'item' : 'items'}
             </div>
             <ShareButton galleryTitle={gallery.title} />
@@ -131,7 +139,7 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
         </div>
       </header>
 
-      <main className="flex-grow mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-grow mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-6 relative">
         <GalleryGrid 
           items={serializedItems} 
           r2PublicUrl={r2PublicUrl} 

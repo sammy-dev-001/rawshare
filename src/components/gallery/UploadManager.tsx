@@ -60,17 +60,53 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
         throw new Error("No files uploaded.");
       }
 
+      const itemsWithDimensions = await Promise.all(
+        orderedResults.map(async ({ item, result }) => {
+          let width: number | undefined = undefined;
+          let height: number | undefined = undefined;
+          try {
+            const url = URL.createObjectURL(item.file);
+            if (item.file.type.startsWith("video/")) {
+              const video = document.createElement("video");
+              await new Promise((resolve, reject) => {
+                video.onloadedmetadata = resolve;
+                video.onerror = reject;
+                video.src = url;
+              });
+              width = video.videoWidth;
+              height = video.videoHeight;
+            } else if (item.file.type.startsWith("image/")) {
+              const img = new Image();
+              await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = url;
+              });
+              width = img.width;
+              height = img.height;
+            }
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            // gracefully degrade to undefined
+          }
+
+          return {
+            originalKey: result.originalKey,
+            previewKey: result.previewKey,
+            fileType: item.file.type,
+            sizeBytes: item.file.size,
+            width,
+            height,
+          };
+        })
+      );
+
       const response = await fetch("/api/galleries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-          items: orderedResults.map(({ item, result }) => ({
-            originalKey: result.originalKey,
-            previewKey: result.previewKey,
-            fileType: item.file.type,
-            sizeBytes: item.file.size,
-          })),
+          items: itemsWithDimensions,
         }),
       });
 

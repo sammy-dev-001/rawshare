@@ -38,6 +38,63 @@ interface DownloadProgress {
   totalFiles: number;
 }
 
+function ImageThumbnail({ src, alt, isSelected }: { src: string; alt: string; isSelected: boolean }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <>
+      {!loaded && <div className="absolute inset-0 bg-zinc-800 animate-pulse pointer-events-none" />}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onLoad={() => setLoaded(true)}
+        className={`h-full w-full object-cover pointer-events-none select-none transition-all duration-700 ease-out ${
+          !loaded ? "opacity-0 scale-105 blur-md" : isSelected ? "opacity-70 scale-95 blur-0" : "opacity-100 scale-100 blur-0 hover:opacity-100"
+        }`}
+      />
+    </>
+  );
+}
+
+function VideoThumbnail({ src, isSelected }: { src: string; isSelected: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  };
+  
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+  };
+
+  return (
+    <div 
+      className="absolute inset-0 h-full w-full"
+      onMouseEnter={handleMouseEnter} 
+      onMouseLeave={handleMouseLeave}
+    >
+      <video
+        ref={videoRef}
+        src={src}
+        className={`h-full w-full object-cover transition-all duration-500 pointer-events-none select-none ${
+          isSelected ? "opacity-70 scale-95" : "opacity-90 hover:opacity-100"
+        }`}
+        preload="metadata"
+        muted
+        playsInline
+        loop
+      />
+      <div className="absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm border border-white/5 pointer-events-none">
+        VIDEO
+      </div>
+    </div>
+  );
+}
+
 export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridProps) {
   // --- Selection State ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -316,13 +373,15 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                 {group.dateLabel}
               </h2>
 
-              {/* Grid Layout */}
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 sm:gap-3">
+              {/* Flexbox Justified Layout */}
+              <div className="flex flex-wrap gap-2 sm:gap-3 after:content-[''] after:grow-[1000000000]">
                 {group.items.map((item, index) => {
                   const isSelected = selectedIds.has(item.id);
                   const imageUrl = item.previewKey
                     ? `${r2PublicUrl}/${item.previewKey}`
                     : `${r2PublicUrl}/${item.originalKey}`;
+                    
+                  const ratio = item.width && item.height ? item.width / item.height : 1;
 
                   return (
                     <motion.div
@@ -335,11 +394,15 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                       onTouchEnd={clearLongPress}
                       whileHover={{ scale: isSelectMode ? 0.98 : 1.02 }}
                       whileTap={{ scale: 0.96 }}
-                      className={`relative aspect-square cursor-pointer overflow-hidden rounded-2xl border bg-zinc-900 transition-all select-none ${
+                      className={`relative cursor-pointer overflow-hidden rounded-xl border bg-zinc-900 transition-all select-none h-[120px] sm:h-[160px] md:h-[200px] lg:h-[240px] flex-auto ${
                         isSelected
                           ? "border-blue-500 shadow-lg shadow-blue-500/10 ring-2 ring-blue-500/25"
                           : "border-zinc-900 hover:border-zinc-800"
                       }`}
+                      style={{
+                        flexGrow: ratio,
+                        width: `${ratio * 160}px`
+                      }}
                     >
                       {/* Checkbox Overlay */}
                       <AnimatePresence>
@@ -369,31 +432,16 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
 
                       {/* Video or Image Thumbnail */}
                       {item.fileType.startsWith("video/") ? (
-                        <video
-                          src={`${r2PublicUrl}/${item.originalKey}`}
-                          className={`h-full w-full object-cover transition-all duration-300 pointer-events-none select-none ${
-                            isSelected ? "opacity-70 scale-95" : "opacity-90 hover:opacity-100"
-                          }`}
-                          preload="metadata"
-                          muted
-                          playsInline
+                        <VideoThumbnail 
+                          src={`${r2PublicUrl}/${item.originalKey}`} 
+                          isSelected={isSelected} 
                         />
                       ) : (
-                        <img
-                          src={imageUrl}
-                          alt="Gallery thumbnail"
-                          loading="lazy"
-                          className={`h-full w-full object-cover transition-all duration-300 pointer-events-none select-none ${
-                            isSelected ? "opacity-70 scale-95" : "opacity-90 hover:opacity-100"
-                          }`}
+                        <ImageThumbnail 
+                          src={imageUrl} 
+                          alt="Gallery thumbnail" 
+                          isSelected={isSelected} 
                         />
-                      )}
-
-                      {/* Video Indicator */}
-                      {item.fileType.startsWith("video/") && (
-                        <div className="absolute bottom-2 right-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white backdrop-blur-sm border border-white/5 pointer-events-none">
-                          VIDEO
-                        </div>
                       )}
                     </motion.div>
                   );
