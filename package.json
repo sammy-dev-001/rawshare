@@ -4,22 +4,29 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/s3-presigned-post": "^3.1075.0",
     "@aws-sdk/s3-request-presigner": "^3.500.0",
+    "@clerk/nextjs": "^7.5.12",
     "@prisma/client": "^5.10.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "browser-image-compression": "^2.0.2",
+    "fflate": "^0.8.3",
     "file-saver": "^2.0.5",
     "framer-motion": "^11.0.8",
     "jszip": "^3.10.1",
     "lucide-react": "^0.475.0",
     "next": "16.2.6",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-zoom-pan-pinch": "^4.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

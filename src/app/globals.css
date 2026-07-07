@@ -10,11 +10,16 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* Custom Subtle Cyber Colors */
+  --color-slate-bg: #1E2124;
+  --color-slate-surface: #282B30;
+  --color-teal-accent: #00E5FF;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #1E2124;
     --foreground: #ededed;
   }
 }
@@ -24,3 +29,28 @@ body {
   color: var(--foreground);
   font-family: var(--font-outfit), var(--font-sans), sans-serif;
 }
+
+@keyframes aurora-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(50px, -50px) scale(1.1); }
+  66% { transform: translate(-30px, 30px) scale(0.9); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes aurora-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-50px, 50px) scale(0.9); }
+  66% { transform: translate(30px, -30px) scale(1.1); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+@keyframes aurora-3 {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, 50px) scale(1.2); }
+  66% { transform: translate(-50px, -20px) scale(0.8); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+.animate-aurora-1 { animation: aurora-1 15s ease-in-out infinite; }
+.animate-aurora-2 { animation: aurora-2 18s ease-in-out infinite; }
+.animate-aurora-3 { animation: aurora-3 20s ease-in-out infinite; }

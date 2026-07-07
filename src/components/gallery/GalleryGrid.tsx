@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Loader2, Image as ImageIcon, Calendar } from "lucide-react";
-import JSZip from "jszip";
-import { saveAs } from "file-saver";
+import { Check, Image as ImageIcon, Calendar } from "lucide-react";
 import { ActionBar } from "./ActionBar";
 import { Lightbox } from "./Lightbox";
+import { useAuth } from "@clerk/nextjs";
 
 interface MediaItem {
   id: string;
@@ -24,6 +23,8 @@ interface GalleryGridProps {
   items: MediaItem[];
   r2PublicUrl: string;
   galleryTitle: string;
+  slug: string;
+  ownerId?: string | null;
 }
 
 interface DateGroup {
@@ -43,6 +44,7 @@ function ImageThumbnail({ src, alt, isSelected }: { src: string; alt: string; is
   return (
     <>
       {!loaded && <div className="absolute inset-0 bg-zinc-800 animate-pulse pointer-events-none" />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}
@@ -95,7 +97,7 @@ function VideoThumbnail({ src, isSelected }: { src: string; isSelected: boolean 
   );
 }
 
-export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridProps) {
+export function GalleryGrid({ items, r2PublicUrl, galleryTitle, slug, ownerId }: GalleryGridProps) {
   // --- Selection State ---
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -111,6 +113,25 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
     currentFile: 0,
     totalFiles: 0,
   });
+
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // --- Auth State ---
+  const { userId, isLoaded } = useAuth();
+  const [isAuthorized, setIsAuthorized] = useState(false);
+
+  React.useEffect(() => {
+    if (!isLoaded) return;
+    let authorized = false;
+    if (ownerId && userId === ownerId) {
+      authorized = true;
+    }
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem(`admin_token_${slug}`);
+      if (token) authorized = true;
+    }
+    setIsAuthorized(authorized);
+  }, [userId, isLoaded, ownerId, slug]);
 
   // --- Long Press Logic ---
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +154,27 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
         day: "numeric",
         year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
       });
+    }
+  };
+
+  // --- Animation Variants ---
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.05
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20, scale: 0.95 },
+    visible: { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1,
+      transition: { type: "spring", stiffness: 300, damping: 24 }
     }
   };
 
@@ -220,118 +262,137 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
     setIsSelectMode(false);
   }, []);
 
-  // --- Client-side ZIP Downloader ---
+  // --- Multi-file Downloader ---
+  // Chrome/Edge: uses File System Access API — user picks a folder once, all files save with no further prompts.
+  // Safari/Firefox fallback: staggered individual downloads.
   const handleDownloadSelected = async () => {
-    if (selectedIds.size === 0) return;
+    if (selectedIds.size === 0 || isDownloading) return;
     setIsDownloading(true);
 
     const selectedItems = items.filter((item) => selectedIds.has(item.id));
-    const zip = new JSZip();
-    const totalFiles = selectedItems.length;
 
     setDownloadProgress({
       phase: "downloading",
       progress: 0,
       currentFile: 0,
-      totalFiles,
+      totalFiles: selectedItems.length,
     });
 
-    try {
-      // Direct R2 fetch inside browser
-      // Throttling downloads to max 4 concurrent requests to not overwhelm connection
-      const concurrencyLimit = 4;
-      const downloadResults: Array<{ blob: Blob; fileName: string }> = [];
-
-      for (let i = 0; i < selectedItems.length; i += concurrencyLimit) {
-        const chunk = selectedItems.slice(i, i + concurrencyLimit);
-        const promises = chunk.map(async (item, chunkIndex) => {
-          const fileIndex = i + chunkIndex;
-          const originalUrl = `${r2PublicUrl}/${item.originalKey}`;
-          const fileName = item.originalKey.split("/").pop() || `media-${item.id}`;
-
-          // Fetch file binary
-          const response = await fetch(originalUrl);
-          if (!response.ok) {
-            throw new Error(`Failed to download ${fileName} (HTTP ${response.status})`);
-          }
-          const blob = await response.blob();
-
-          downloadResults.push({ blob, fileName });
-
-          // Update progress
-          setDownloadProgress((prev) => {
-            const nextCurrent = prev.currentFile + 1;
-            // 80% of progress allocated to downloading, 20% to compression
-            const progressVal = Math.round((nextCurrent / totalFiles) * 80);
-            return {
-              ...prev,
-              phase: "downloading",
-              currentFile: nextCurrent,
-              progress: progressVal,
-            };
-          });
+    // --- Path A: File System Access API (Chrome/Edge) ---
+    if ("showDirectoryPicker" in window) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dirHandle = await (window as any).showDirectoryPicker({
+          mode: "readwrite",
+          startIn: "downloads",
         });
 
-        await Promise.all(promises);
+        for (let i = 0; i < selectedItems.length; i++) {
+          const item = selectedItems[i];
+          try {
+            const url = `${r2PublicUrl}/${item.originalKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
+
+            const filename = item.originalKey.split("/").pop() || `file_${i + 1}`;
+            const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await response.body!.pipeTo(writable);
+          } catch (err) {
+            console.error("Failed to save", selectedItems[i].originalKey, err);
+          }
+
+          setDownloadProgress({
+            phase: "downloading",
+            progress: Math.round(((i + 1) / selectedItems.length) * 100),
+            currentFile: i + 1,
+            totalFiles: selectedItems.length,
+          });
+        }
+      } catch (err) {
+        // User cancelled the folder picker — abort gracefully
+        console.info("Directory picker cancelled", err);
+        setDownloadProgress({ phase: "idle", progress: 0, currentFile: 0, totalFiles: 0 });
+        setIsDownloading(false);
+        return;
+      }
+    } else {
+      // --- Path B: Staggered <a download> fallback (Safari/Firefox) ---
+      for (let i = 0; i < selectedItems.length; i++) {
+        const item = selectedItems[i];
+        try {
+          const url = `${r2PublicUrl}/${item.originalKey}`;
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
+
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const filename = item.originalKey.split("/").pop() || "file";
+          const a = document.createElement("a");
+          a.href = blobUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        } catch (err) {
+          console.error("Download failed for", item.originalKey, err);
+        }
+
+        setDownloadProgress({
+          phase: "downloading",
+          progress: Math.round(((i + 1) / selectedItems.length) * 100),
+          currentFile: i + 1,
+          totalFiles: selectedItems.length,
+        });
+
+        if (i < selectedItems.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+        }
+      }
+    }
+
+    setDownloadProgress({ phase: "idle", progress: 100, currentFile: 0, totalFiles: 0 });
+    setIsDownloading(false);
+    handleClearSelection();
+  };
+
+  // --- Delete Handler ---
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0 || isDeleting) return;
+    
+    if (!confirm(`Are you sure you want to delete ${selectedIds.size} item(s)?`)) return;
+
+    setIsDeleting(true);
+
+    try {
+      const adminToken = localStorage.getItem(`admin_token_${slug}`);
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (adminToken) {
+        headers["x-admin-token"] = adminToken;
       }
 
-      // Add downloaded blobs to zip structure
-      downloadResults.forEach(({ blob, fileName }) => {
-        zip.file(fileName, blob);
+      const res = await fetch(`/api/galleries/${slug}`, {
+        method: "DELETE",
+        headers,
+        body: JSON.stringify({ itemIds: Array.from(selectedIds) }),
       });
 
-      // Compress zip
-      setDownloadProgress((prev) => ({
-        ...prev,
-        phase: "zipping",
-        progress: 80,
-      }));
+      if (!res.ok) {
+        throw new Error("Failed to delete items");
+      }
 
-      const zipBlob = await zip.generateAsync(
-        { type: "blob" },
-        (metadata: { percent: number }) => {
-          // Map zip compression percentage from 80% to 98%
-          const compressionProgress = 80 + Math.round(metadata.percent * 0.18);
-          setDownloadProgress((prev) => ({
-            ...prev,
-            progress: compressionProgress,
-          }));
-        }
-      );
-
-      // Trigger client download
-      setDownloadProgress((prev) => ({
-        ...prev,
-        phase: "saving",
-        progress: 99,
-      }));
-
-      // Sanitize gallery title for filename
-      const safeTitle = galleryTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-      saveAs(zipBlob, `${safeTitle}_gallery.zip`);
-
-      setDownloadProgress((prev) => ({
-        ...prev,
-        phase: "idle",
-        progress: 100,
-      }));
-
-      // Reset selection mode upon successful download completion
-      setTimeout(() => {
-        setIsDownloading(false);
-        handleClearSelection();
-      }, 1000);
-    } catch (error) {
-      console.error("ZIP creation failed:", error);
-      setDownloadProgress((prev) => ({
-        ...prev,
-        phase: "error",
-        progress: 0,
-      }));
-      setIsDownloading(false);
-      alert("Failed to download files. Please make sure the R2 CORS configuration is active.");
+      window.location.reload();
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("Failed to delete items.");
+    } finally {
+      setIsDeleting(false);
     }
   };
+
 
   return (
     <div className="relative">
@@ -369,12 +430,17 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
           {groupedItems.map((group) => (
             <div key={group.dateLabel} className="space-y-3">
               {/* Sticky Date Header */}
-              <h2 className="sticky top-[68px] z-30 bg-zinc-950/90 py-2.5 backdrop-blur-md text-xs font-bold text-zinc-400 uppercase tracking-widest pl-1">
+              <h2 className="sticky top-[68px] z-30 bg-slate-bg/90 py-2.5 backdrop-blur-md text-xs font-bold text-teal-accent uppercase tracking-widest pl-1">
                 {group.dateLabel}
               </h2>
 
               {/* Flexbox Justified Layout */}
-              <div className="flex flex-wrap gap-2 sm:gap-3 after:content-[''] after:grow-[1000000000]">
+              <motion.div 
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="flex flex-wrap gap-2 sm:gap-3 after:content-[''] after:grow-[1000000000]"
+              >
                 {group.items.map((item, index) => {
                   const isSelected = selectedIds.has(item.id);
                   const imageUrl = item.previewKey
@@ -386,6 +452,7 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                   return (
                     <motion.div
                       key={item.id}
+                      variants={itemVariants}
                       onClick={() => handleItemClick(item, index)}
                       onMouseDown={() => startLongPress(item.id)}
                       onMouseUp={clearLongPress}
@@ -394,10 +461,10 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                       onTouchEnd={clearLongPress}
                       whileHover={{ scale: isSelectMode ? 0.98 : 1.02 }}
                       whileTap={{ scale: 0.96 }}
-                      className={`relative cursor-pointer overflow-hidden rounded-xl border bg-zinc-900 transition-all select-none h-[120px] sm:h-[160px] md:h-[200px] lg:h-[240px] flex-auto ${
+                      className={`relative cursor-pointer overflow-hidden rounded-xl border bg-slate-surface transition-all select-none h-[120px] sm:h-[160px] md:h-[200px] lg:h-[240px] flex-auto ${
                         isSelected
-                          ? "border-blue-500 shadow-lg shadow-blue-500/10 ring-2 ring-blue-500/25"
-                          : "border-zinc-900 hover:border-zinc-800"
+                          ? "border-teal-accent shadow-lg shadow-teal-accent/20 ring-2 ring-teal-accent/30"
+                          : "border-white/5 hover:border-teal-accent/50 hover:shadow-[0_0_20px_rgba(0,229,255,0.15)]"
                       }`}
                       style={{
                         flexGrow: ratio,
@@ -413,8 +480,8 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                             exit={{ opacity: 0, scale: 0.8 }}
                             className="absolute top-2.5 left-2.5 z-20 flex h-6 w-6 items-center justify-center rounded-full border shadow-md transition-colors"
                             style={{
-                              backgroundColor: isSelected ? "#3b82f6" : "rgba(24, 24, 27, 0.6)",
-                              borderColor: isSelected ? "#3b82f6" : "rgba(255, 255, 255, 0.2)",
+                              backgroundColor: isSelected ? "#00E5FF" : "rgba(40, 43, 48, 0.6)",
+                              borderColor: isSelected ? "#00E5FF" : "rgba(255, 255, 255, 0.2)",
                             }}
                           >
                             {isSelected && (
@@ -446,7 +513,7 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
                     </motion.div>
                   );
                 })}
-              </div>
+              </motion.div>
             </div>
           ))}
         </div>
@@ -454,6 +521,7 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
 
       {/* Sticky Bottom Actions pill */}
       <ActionBar
+        isSelectMode={isSelectMode}
         selectedCount={selectedIds.size}
         totalCount={items.length}
         onDownload={handleDownloadSelected}
@@ -461,6 +529,9 @@ export function GalleryGrid({ items, r2PublicUrl, galleryTitle }: GalleryGridPro
         onClearSelection={handleClearSelection}
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
+        isAuthorized={isAuthorized}
+        onDelete={handleDeleteSelected}
+        isDeleting={isDeleting}
       />
 
       {/* Full-Screen Swipeable Lightbox */}

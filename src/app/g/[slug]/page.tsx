@@ -4,6 +4,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { ShieldAlert, Calendar } from "lucide-react";
+import { GalleryActions } from "@/components/gallery/GalleryActions";
 import ShareButton from "@/components/gallery/ShareButton";
 
 interface GalleryPageProps {
@@ -80,8 +81,8 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
 
   if (isExpired) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4 text-center text-zinc-100 font-sans">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/40 p-8 shadow-2xl backdrop-blur-md max-w-md w-full">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-slate-bg px-4 text-center text-zinc-100 font-sans">
+        <div className="rounded-3xl border border-white/5 bg-slate-surface/40 p-8 shadow-2xl backdrop-blur-md max-w-md w-full">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-950/40 text-red-500 border border-red-500/10 mb-6">
             <ShieldAlert className="h-7 w-7" />
           </div>
@@ -89,7 +90,7 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
           <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
             The owner configured an expiration date for this shared gallery, and it is no longer available.
           </p>
-          <div className="flex items-center justify-center gap-2 text-xs text-zinc-500 bg-zinc-900/80 px-4 py-2.5 rounded-2xl border border-zinc-800">
+          <div className="flex items-center justify-center gap-2 text-xs text-zinc-500 bg-slate-bg/80 px-4 py-2.5 rounded-2xl border border-white/5">
             <Calendar className="h-4 w-4 text-zinc-400" />
             <span>Expired on {new Date(gallery.expiresAt!).toLocaleDateString(undefined, { dateStyle: 'long' })}</span>
           </div>
@@ -115,16 +116,16 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
   }));
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 relative">
+    <div className="min-h-screen bg-slate-bg text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 relative">
       
       {/* Ambient Background Glows */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-900/15 blur-[120px] mix-blend-screen" />
-        <div className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-purple-900/15 blur-[120px] mix-blend-screen" />
-        <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-emerald-900/10 blur-[120px] mix-blend-screen" />
+        <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-slate-surface blur-[120px] mix-blend-screen animate-aurora-1" />
+        <div className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-teal-accent/10 blur-[120px] mix-blend-screen animate-aurora-2" />
+        <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-slate-surface blur-[120px] mix-blend-screen animate-aurora-3" />
       </div>
 
-      <header className="border-b border-white/5 bg-black/40 sticky top-0 z-40 backdrop-blur-xl">
+      <header className="border-b border-white/5 bg-slate-bg/80 sticky top-0 z-40 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex flex-col">
             <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">Shared Gallery</span>
@@ -143,18 +144,22 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
         <GalleryGrid 
           items={serializedItems} 
           r2PublicUrl={r2PublicUrl} 
-          galleryTitle={gallery.title} 
+          galleryTitle={gallery.title}
+          slug={gallery.slug}
+          ownerId={gallery.userId}
         />
 
         <div className="mt-24 pb-8 flex justify-center">
           <Link 
             href="/" 
-            className="flex items-center gap-2 text-sm font-semibold text-zinc-300 hover:text-white transition-colors bg-zinc-900/80 hover:bg-zinc-800 px-6 py-3 rounded-full border border-zinc-800"
+            className="flex items-center gap-2 text-sm font-semibold text-zinc-300 hover:text-white transition-all bg-slate-surface/80 hover:bg-slate-surface px-6 py-3 rounded-full border border-white/5 hover:border-teal-accent/50 hover:shadow-[0_0_15px_rgba(0,229,255,0.2)]"
           >
             Create your own RawShare gallery
           </Link>
         </div>
       </main>
+
+      <GalleryActions slug={gallery.slug} ownerId={gallery.userId} />
     </div>
   );
 }

@@ -1,4 +1,3 @@
-/* eslint-disable */
 "use client";
 
 import { useState, useCallback } from "react";
@@ -23,9 +22,9 @@ export default function Home() {
       
       {/* Ambient Background Glows */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-indigo-900/20 blur-[120px] mix-blend-screen" />
-        <div className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-purple-900/20 blur-[120px] mix-blend-screen" />
-        <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-emerald-900/10 blur-[120px] mix-blend-screen" />
+        <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-slate-bg blur-[120px] mix-blend-screen animate-aurora-1" />
+        <div className="absolute top-[20%] -right-[20%] w-[60%] h-[60%] rounded-full bg-teal-accent/10 blur-[120px] mix-blend-screen animate-aurora-2" />
+        <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-slate-surface blur-[120px] mix-blend-screen animate-aurora-3" />
       </div>
 
       <header className="w-full p-6 flex justify-between items-center border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
@@ -46,7 +45,7 @@ export default function Home() {
             className="text-4xl md:text-5xl font-bold tracking-tight text-white mb-4"
           >
             Share your media, <br className="hidden md:block" />
-            <span className="text-zinc-500">beautifully.</span>
+            <span className="bg-gradient-to-r from-zinc-300 to-teal-accent/80 text-transparent bg-clip-text">beautifully.</span>
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -62,7 +61,7 @@ export default function Home() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, type: "spring", stiffness: 300, damping: 25 }}
-          className="relative z-10 bg-zinc-950/40 backdrop-blur-2xl border border-white/10 rounded-3xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.5)]"
+          className="relative z-10 bg-slate-surface/40 backdrop-blur-2xl border border-white/10 rounded-3xl p-2 shadow-[0_0_50px_rgba(0,0,0,0.5)]"
         >
           <div className="bg-white/5 rounded-2xl p-6 md:p-8 border border-white/5">
             
@@ -74,7 +73,7 @@ export default function Home() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                 >
-                  <UploadDropzone onFilesSelected={handleFilesSelected} maxFiles={35} />
+                  <UploadDropzone onFilesSelected={handleFilesSelected} maxFiles={50} />
                 </motion.div>
               ) : (
                 <UploadManager key="manager" initialFiles={files} onClear={handleClear} />
@@ -85,7 +84,7 @@ export default function Home() {
         </motion.div>
         
         <p className="text-center text-zinc-600 text-xs mt-8">
-          Max 35 files per gallery. High resolution supported.
+          Max 50 files per gallery. High resolution supported.
         </p>
       </div>
     </main>

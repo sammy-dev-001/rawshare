@@ -15,6 +15,8 @@ export interface UploadQueueItem {
 interface UploadManagerProps {
   initialFiles: File[];
   onClear: () => void;
+  existingSlug?: string;
+  onUploadComplete?: () => void;
 }
 
 const QUALITY_OPTIONS: { id: UploadQuality; label: string; desc: string }[] = [
@@ -23,7 +25,7 @@ const QUALITY_OPTIONS: { id: UploadQuality; label: string; desc: string }[] = [
   { id: "original", label: "Original", desc: "Raw untouched files (may consume more data)" },
 ];
 
-export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
+export function UploadManager({ initialFiles, onClear, existingSlug, onUploadComplete }: UploadManagerProps) {
   const router = useRouter();
   
   // Wrap files with unique IDs for Reorder to work correctly
@@ -86,7 +88,7 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
               height = img.height;
             }
             URL.revokeObjectURL(url);
-          } catch (e) {
+          } catch {
             // gracefully degrade to undefined
           }
 
@@ -101,22 +103,46 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
         })
       );
 
-      const response = await fetch("/api/galleries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-          items: itemsWithDimensions,
-        }),
-      });
+      let response;
+      if (existingSlug) {
+        // Appending to an existing gallery
+        const adminToken = localStorage.getItem(`admin_token_${existingSlug}`);
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (adminToken) headers["x-admin-token"] = adminToken;
+
+        response = await fetch(`/api/galleries/${existingSlug}`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ items: itemsWithDimensions }),
+        });
+      } else {
+        // Creating a new gallery
+        response = await fetch("/api/galleries", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+            items: itemsWithDimensions,
+          }),
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to create gallery");
+        throw new Error(errorData.error || "Failed to save gallery");
       }
 
-      const { slug } = await response.json();
-      router.push(`/g/${slug}`);
+      if (existingSlug) {
+        // Refresh the page or call callback
+        if (onUploadComplete) onUploadComplete();
+        else window.location.reload();
+      } else {
+        const { slug, adminToken } = await response.json();
+        if (adminToken) {
+          localStorage.setItem(`admin_token_${slug}`, adminToken);
+        }
+        router.push(`/g/${slug}`);
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         setGlobalError(err.message);
@@ -179,7 +205,7 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
     });
   }, []);
 
-  const handleUploadError = useCallback((id: string, _error: string) => {
+  const handleUploadError = useCallback((id: string) => {
     setActiveUploadIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -330,20 +356,22 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
         </p>
       </div>
 
-      <div className="pt-4 border-t border-zinc-800/50">
-        <label htmlFor="title" className="block text-sm font-medium text-zinc-400 mb-2">
-          Gallery Title
-        </label>
-        <input
-          id="title"
-          type="text"
-          placeholder={`e.g. Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          disabled={isUploading}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
-        />
-      </div>
+      {!existingSlug && (
+        <div className="pt-4 border-t border-zinc-800/50">
+          <label htmlFor="title" className="block text-sm font-medium text-zinc-400 mb-2">
+            Gallery Title
+          </label>
+          <input
+            id="title"
+            type="text"
+            placeholder={`e.g. Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isUploading}
+            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
+          />
+        </div>
+      )}
 
       {globalError && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col gap-3">
@@ -373,7 +401,7 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
         {isCreatingGallery ? (
           <>
             <Loader2 className="w-5 h-5 animate-spin" />
-            Finishing Gallery...
+            {existingSlug ? "Saving..." : "Finishing Gallery..."}
           </>
         ) : isUploading ? (
           <>
@@ -382,7 +410,7 @@ export function UploadManager({ initialFiles, onClear }: UploadManagerProps) {
           </>
         ) : (
           <>
-            Upload and Create Link
+            {existingSlug ? "Upload Images" : "Upload and Create Link"}
             <ArrowRight className="w-5 h-5" />
           </>
         )}

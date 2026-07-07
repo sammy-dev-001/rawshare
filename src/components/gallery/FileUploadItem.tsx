@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useUpload, UploadResult, UploadQuality, HIGH_QUALITY_OPTIONS, STANDARD_QUALITY_OPTIONS } from "@/hooks/useUpload";
 import imageCompression from "browser-image-compression";
-import { motion, Reorder } from "framer-motion";
+import { motion, Reorder, useDragControls } from "framer-motion";
 import { CheckCircle2, AlertCircle, Loader2, FileIcon, ImageIcon, VideoIcon, RefreshCcw, X, GripVertical } from "lucide-react";
 import { UploadQueueItem } from "./UploadManager";
 
@@ -21,6 +21,7 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
   const file = item.file;
   const { upload, status, progress, error, reset, abort, compressedSize } = useUpload();
   const [hasStarted, setHasStarted] = useState(false);
+  const dragControls = useDragControls();
   
   // Preview URL for local display
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -31,7 +32,7 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
   useEffect(() => {
     if (!file.type.startsWith("image/")) return;
     if (quality === "original") {
-      setPrecompressedBlob(null);
+      setTimeout(() => setPrecompressedBlob(null), 0);
       return;
     }
     
@@ -44,7 +45,7 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
         if (isActive) {
           setPrecompressedBlob(blob);
         }
-      } catch (e) {
+      } catch {
         // Ignore pre-compression errors
       } finally {
         if (isActive) setIsPrecompressing(false);
@@ -123,6 +124,8 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
     <Reorder.Item 
       value={item}
       id={item.id}
+      dragListener={false}
+      dragControls={dragControls}
       variants={{
         hidden: { opacity: 0, y: 10 },
         visible: { opacity: 1, y: 0 }
@@ -130,15 +133,22 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
       initial="hidden"
       animate="visible"
       exit={{ opacity: 0, scale: 0.95 }}
-      className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-3 relative group"
+      className="flex items-center gap-3 rounded-2xl border border-white/5 bg-slate-bg/60 backdrop-blur-sm p-3 relative group shadow-sm hover:border-teal-accent/30 transition-colors"
     >
-      <div className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing px-1 touch-none">
+      <div 
+        onPointerDown={(e) => dragControls.start(e)}
+        className="text-zinc-600 hover:text-zinc-400 cursor-grab active:cursor-grabbing px-1 touch-none"
+        style={{ touchAction: "none" }}
+      >
         <GripVertical size={16} />
       </div>
 
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl bg-zinc-800">
         {previewUrl ? (
-          <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
+          </>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-zinc-500">
             {isImage ? <ImageIcon size={20} /> : isVideo ? <VideoIcon size={20} /> : <FileIcon size={20} />}
@@ -168,7 +178,7 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
         <div className="flex items-center gap-3">
           <div className="h-1.5 flex-1 rounded-full bg-zinc-800/50">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+              className="h-full rounded-full bg-gradient-to-r from-slate-surface via-teal-accent to-teal-accent shadow-[0_0_10px_rgba(0,229,255,0.5)]"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ ease: "linear", duration: 0.2 }}

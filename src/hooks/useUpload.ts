@@ -108,8 +108,8 @@ export const STANDARD_QUALITY_OPTIONS: Parameters<typeof imageCompression>[1] = 
 interface PresignedUrlResponse {
   originalUploadUrl: string;
   originalKey: string;
-  previewUploadUrl: string;
-  previewKey: string;
+  previewUploadUrl: string | null;
+  previewKey: string | null;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -178,6 +178,8 @@ export function useUpload(): UseUploadReturn {
         body: JSON.stringify({
           fileName: file.name,
           fileType: file.type,
+          sizeBytes: originalBlob.size,
+          previewSizeBytes: previewBlob?.size,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -194,12 +196,7 @@ export function useUpload(): UseUploadReturn {
         originalKey,
         previewUploadUrl,
         previewKey,
-      } = (await apiResponse.json()) as {
-        originalUploadUrl: string;
-        originalKey: string;
-        previewUploadUrl: string | null;
-        previewKey: string | null;
-      };
+      } = (await apiResponse.json()) as PresignedUrlResponse;
 
       // ── Step 3: Upload files directly to R2 in parallel ────────────────
       //
@@ -224,7 +221,9 @@ export function useUpload(): UseUploadReturn {
         uploadPromises.push(
           fetch(previewUploadUrl, {
             method: "PUT",
-            headers: { "Content-Type": "image/webp" },
+            headers: {
+              "Content-Type": "image/webp",
+            },
             body: previewBlob,
             signal: abortControllerRef.current?.signal,
           }).then((res) => {

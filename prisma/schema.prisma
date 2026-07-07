@@ -9,15 +9,18 @@ datasource db {
 }
 
 model Gallery {
-  id        String      @id @default(cuid())
-  slug      String      @unique
-  title     String
-  expiresAt DateTime?   @map("expires_at")
-  createdAt DateTime    @default(now()) @map("created_at")
-  updatedAt DateTime    @updatedAt @map("updated_at")
-  items     MediaItem[]
+  id         String      @id @default(cuid())
+  slug       String      @unique
+  title      String
+  expiresAt  DateTime?   @map("expires_at")
+  userId     String?     @map("user_id")
+  adminToken String?     @map("admin_token")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  items      MediaItem[]
 
   @@index([slug])
+  @@index([userId])
   @@map("galleries")
 }
 

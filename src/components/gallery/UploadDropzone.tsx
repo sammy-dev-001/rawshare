@@ -10,7 +10,7 @@ interface UploadDropzoneProps {
   disabled?: boolean;
 }
 
-export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = false }: UploadDropzoneProps) {
+export function UploadDropzone({ onFilesSelected, maxFiles = 50, disabled = false }: UploadDropzoneProps) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,8 +87,8 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = fals
           disabled
             ? "border-zinc-800 border-dashed bg-zinc-900/50 cursor-not-allowed opacity-60"
             : isDragActive
-            ? "border-indigo-400 border-solid bg-indigo-500/10 shadow-[0_0_30px_rgba(129,140,248,0.3)] cursor-copy"
-            : "border-zinc-800 border-dashed bg-zinc-900/40 hover:bg-zinc-800/60 hover:border-zinc-600 cursor-pointer"
+            ? "border-teal-accent border-solid bg-teal-accent/10 shadow-[0_0_30px_rgba(0,229,255,0.3)] cursor-copy"
+            : "border-slate-surface border-dashed bg-slate-bg/40 hover:bg-slate-surface/60 hover:border-zinc-500 cursor-pointer"
         }`}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -143,7 +143,7 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = fals
             High-quality photos and videos are supported. Max {maxFiles} files per gallery.
           </p>
 
-          <div className="rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black shadow-md">
+          <div className="rounded-full bg-slate-surface border border-white/5 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-[0_0_15px_rgba(0,229,255,0.4)] hover:border-teal-accent/50 transition-all duration-300">
             Browse Files
           </div>
         </div>
@@ -155,7 +155,7 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 35, disabled = fals
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="absolute inset-0 -z-10 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 blur-2xl rounded-full pointer-events-none" 
+              className="absolute inset-0 -z-10 bg-gradient-to-r from-teal-accent/20 via-slate-surface/40 to-teal-accent/10 blur-2xl rounded-full pointer-events-none" 
             />
           )}
         </AnimatePresence>

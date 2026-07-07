@@ -22,6 +22,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2Client, R2_BUCKET_NAME } from "@/lib/r2";
 import { randomUUID } from "crypto";
+import { rateLimiter } from "@/lib/rate-limit";
 
 // ─── Request body shape ───────────────────────────────────────────────────────
 
@@ -30,6 +31,10 @@ interface UploadRequestBody {
   fileType: string;
   /** Original file name, used only to derive the extension. */
   fileName: string;
+  /** The precise size of the original file to lock in the signature. */
+  sizeBytes: number;
+  /** The precise size of the preview WebP file (if applicable). */
+  previewSizeBytes?: number;
 }
 
 // ─── Response shape ───────────────────────────────────────────────────────────
@@ -92,6 +97,13 @@ const PRESIGNED_URL_TTL_SECONDS = 300;
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // 0. Rate limiting
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await rateLimiter.limit(ip);
+  if (!success) {
+    return NextResponse.json({ error: "Too many upload requests. Please try again later." }, { status: 429 });
+  }
+
   // 1. Parse and validate the request body
   let body: UploadRequestBody;
   try {
@@ -103,13 +115,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { fileType, fileName } = body;
+  const { fileType, fileName, sizeBytes, previewSizeBytes } = body;
 
-  if (!fileType || !fileName) {
+  if (!fileType || !fileName || typeof sizeBytes !== "number") {
     return NextResponse.json(
-      { error: "`fileType` and `fileName` are required fields." },
+      { error: "`fileType`, `fileName`, and `sizeBytes` are required fields." },
       { status: 400 }
     );
+  }
+
+  const MAX_ORIGINAL_SIZE = 500 * 1024 * 1024; // 500 MB
+  if (sizeBytes > MAX_ORIGINAL_SIZE) {
+    return NextResponse.json({ error: "Original file exceeds 500MB." }, { status: 413 });
+  }
+
+  if (previewSizeBytes) {
+    const MAX_PREVIEW_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (previewSizeBytes > MAX_PREVIEW_SIZE) {
+      return NextResponse.json({ error: "Preview file exceeds 10MB." }, { status: 413 });
+    }
   }
 
   // Basic MIME type sanity check — prevents uploading executables etc.
@@ -130,29 +154,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const previewKey = isImage ? buildPreviewKey(originalKey) : null;
 
   try {
-    // 3. Generate presigned PUT URL for the original file
-    const originalUploadUrl = await getSignedUrl(
-      r2Client,
-      new PutObjectCommand({
-        Bucket: R2_BUCKET_NAME,
-        Key: originalKey,
-        ContentType: fileType, // Locked to the declared MIME type
-      }),
-      { expiresIn: PRESIGNED_URL_TTL_SECONDS }
-    );
+    // 3. Generate presigned PUT policy for the original file
+    const originalCommand = new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: originalKey,
+      ContentType: fileType,
+      ContentLength: sizeBytes,
+    });
+    
+    const originalUploadUrl = await getSignedUrl(r2Client, originalCommand, {
+      expiresIn: PRESIGNED_URL_TTL_SECONDS,
+    });
 
-    // 4. Generate presigned PUT URL for the preview/thumbnail (only if it's an image)
+    // 4. Generate presigned PUT policy for the preview/thumbnail
     let previewUploadUrl: string | null = null;
-    if (previewKey) {
-      previewUploadUrl = await getSignedUrl(
-        r2Client,
-        new PutObjectCommand({
-          Bucket: R2_BUCKET_NAME,
-          Key: previewKey,
-          ContentType: "image/webp",
-        }),
-        { expiresIn: PRESIGNED_URL_TTL_SECONDS }
-      );
+    if (previewKey && previewSizeBytes !== undefined) {
+      const previewCommand = new PutObjectCommand({
+        Bucket: R2_BUCKET_NAME,
+        Key: previewKey,
+        ContentType: "image/webp",
+        ContentLength: previewSizeBytes,
+      });
+      previewUploadUrl = await getSignedUrl(r2Client, previewCommand, {
+        expiresIn: PRESIGNED_URL_TTL_SECONDS,
+      });
     }
 
     // 5. Return both URLs and keys to the browser

@@ -2,9 +2,10 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, X, CheckSquare, Square, Loader2 } from "lucide-react";
+import { Download, X, CheckSquare, Square, Loader2, Trash2 } from "lucide-react";
 
 interface ActionBarProps {
+  isSelectMode: boolean;
   selectedCount: number;
   totalCount: number;
   onDownload: () => void;
@@ -17,9 +18,13 @@ interface ActionBarProps {
     currentFile: number;
     totalFiles: number;
   };
+  isAuthorized?: boolean;
+  onDelete?: () => void;
+  isDeleting?: boolean;
 }
 
 export function ActionBar({
+  isSelectMode,
   selectedCount,
   totalCount,
   onDownload,
@@ -27,20 +32,23 @@ export function ActionBar({
   onClearSelection,
   isDownloading,
   downloadProgress,
+  isAuthorized,
+  onDelete,
+  isDeleting,
 }: ActionBarProps) {
   const allSelected = selectedCount === totalCount;
 
   return (
     <AnimatePresence>
-      {selectedCount > 0 && (
+      {isSelectMode && (
         <motion.div
-          initial={{ y: 100, x: "-50%", opacity: 0 }}
-          animate={{ y: 0, x: "-50%", opacity: 1 }}
-          exit={{ y: 100, x: "-50%", opacity: 0 }}
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 350 }}
-          className="fixed bottom-6 left-1/2 z-50 w-[90%] max-w-lg -translate-x-1/2"
+          className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none"
         >
-          <div className="flex flex-col gap-2 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-4 shadow-2xl backdrop-blur-xl md:p-5">
+          <div className="flex w-[90%] max-w-lg flex-col gap-2 rounded-3xl border border-zinc-800 bg-zinc-900/90 p-4 shadow-2xl backdrop-blur-xl md:p-5 pointer-events-auto">
             {/* Progress indicators when downloading */}
             {isDownloading && (
               <div className="mb-2 space-y-1.5 px-1">
@@ -50,15 +58,15 @@ export function ActionBar({
                     <span>
                       {downloadProgress.phase === "downloading" &&
                         `Downloading file ${downloadProgress.currentFile} of ${downloadProgress.totalFiles}...`}
-                      {downloadProgress.phase === "zipping" && "Compressing files in browser..."}
+                      {downloadProgress.phase === "zipping" && "Starting download stream..."}
                       {downloadProgress.phase === "saving" && "Saving download zip..."}
                     </span>
                   </div>
-                  <span className="text-blue-400 font-semibold">{downloadProgress.progress}%</span>
+                  <span className="text-teal-accent font-semibold">{downloadProgress.progress}%</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
                   <motion.div
-                    className="h-full bg-blue-500"
+                    className="h-full bg-teal-accent"
                     initial={{ width: 0 }}
                     animate={{ width: `${downloadProgress.progress}%` }}
                     transition={{ duration: 0.1 }}
@@ -101,7 +109,7 @@ export function ActionBar({
                     </>
                   ) : (
                     <>
-                      <CheckSquare className="h-3.5 w-3.5 text-blue-500" />
+                      <CheckSquare className="h-3.5 w-3.5 text-teal-accent" />
                       <span>Select All</span>
                     </>
                   )}
@@ -110,7 +118,7 @@ export function ActionBar({
                 <button
                   onClick={onDownload}
                   disabled={isDownloading || selectedCount === 0}
-                  className="flex items-center gap-2 rounded-full bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:bg-blue-500 hover:shadow-blue-500/40 active:scale-95 disabled:scale-100 disabled:opacity-50 disabled:shadow-none"
+                  className="flex items-center gap-2 rounded-full bg-teal-accent px-4 py-2 text-xs font-bold text-zinc-950 shadow-lg shadow-teal-accent/25 transition-all hover:bg-teal-accent/90 hover:shadow-teal-accent/40 active:scale-95 disabled:scale-100 disabled:opacity-50 disabled:shadow-none"
                 >
                   {isDownloading ? (
                     <>
@@ -124,6 +132,26 @@ export function ActionBar({
                     </>
                   )}
                 </button>
+
+                {isAuthorized && onDelete && (
+                  <button
+                    onClick={onDelete}
+                    disabled={isDeleting || isDownloading || selectedCount === 0}
+                    className="flex items-center gap-2 rounded-full bg-red-500/10 px-4 py-2 text-xs font-bold text-red-500 border border-red-500/20 transition-all hover:bg-red-500/20 active:scale-95 disabled:scale-100 disabled:opacity-50"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Deleting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </div>

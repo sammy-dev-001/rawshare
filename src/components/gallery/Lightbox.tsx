@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
 import {
   X,
   ChevronLeft,
@@ -225,12 +226,7 @@ export function Lightbox({
               dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
               dragElastic={0.4}
               onDragEnd={handleDragEnd}
-              onDoubleClick={() => setIsZoomed(!isZoomed)}
-              animate={{
-                scale: isZoomed ? 2 : 1,
-                cursor: isZoomed ? "zoom-out" : "zoom-in",
-              }}
-              className="relative max-w-full max-h-[80vh] flex items-center justify-center select-none"
+              className="relative w-full h-full max-h-[80vh] flex items-center justify-center select-none"
             >
               {activeItem.fileType.startsWith("video/") ? (
                 <video
@@ -240,33 +236,60 @@ export function Lightbox({
                   className="max-w-full max-h-[75vh] rounded-xl shadow-2xl pointer-events-auto"
                 />
               ) : (
-                <img
-                  src={previewUrl}
-                  alt={getFileName(activeItem.originalKey)}
-                  className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl select-none pointer-events-none"
-                  onLoad={(e) => {
-                    // If preview loaded, optionally trigger loading original in background
-                    const img = e.currentTarget;
-                    if (activeItem.previewKey && img.src !== originalUrl) {
-                      const originalLoader = new Image();
-                      originalLoader.src = originalUrl;
-                      originalLoader.onload = () => {
-                        img.src = originalUrl;
-                      };
+                <TransformWrapper
+                  initialScale={1}
+                  minScale={1}
+                  maxScale={4}
+                  doubleClick={{ step: 2 }}
+                  panning={{ disabled: !isZoomed }}
+                  onZoomStop={(ref) => {
+                    setIsZoomed(ref.state.scale > 1.05);
+                  }}
+                  onPinch={(ref) => {
+                    if (ref.state.scale > 1.05 && !isZoomed) {
+                      setIsZoomed(true);
                     }
                   }}
-                />
-              )}
-
-              {/* Zoom Indicator */}
-              {isZoomed && (
-                <button
-                  onClick={() => setIsZoomed(false)}
-                  className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-md px-3 py-1.5 text-xs text-white border border-white/10"
                 >
-                  <Minimize2 className="h-3.5 w-3.5" />
-                  <span>{TEXT_DOUBLE_TAP_TO_SHRINK}</span>
-                </button>
+                  {({ resetTransform }) => (
+                    <React.Fragment>
+                      <TransformComponent
+                        wrapperStyle={{ width: "100%", height: "100%" }}
+                        contentStyle={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center" }}
+                      >
+                        <img
+                          src={previewUrl}
+                          alt={getFileName(activeItem.originalKey)}
+                          className={`max-w-full max-h-[75vh] object-contain rounded-xl shadow-2xl select-none ${isZoomed ? "pointer-events-auto" : "pointer-events-none"}`}
+                          onLoad={(e) => {
+                            const img = e.currentTarget;
+                            if (activeItem.previewKey && img.src !== originalUrl) {
+                              const originalLoader = new Image();
+                              originalLoader.src = originalUrl;
+                              originalLoader.onload = () => {
+                                img.src = originalUrl;
+                              };
+                            }
+                          }}
+                        />
+                      </TransformComponent>
+
+                      {/* Zoom Indicator */}
+                      {isZoomed && (
+                        <button
+                          onClick={() => {
+                            resetTransform();
+                            setIsZoomed(false);
+                          }}
+                          className="absolute bottom-4 right-4 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-md px-3 py-1.5 text-xs text-white border border-white/10 z-50 pointer-events-auto"
+                        >
+                          <Minimize2 className="h-3.5 w-3.5" />
+                          <span>{TEXT_DOUBLE_TAP_TO_SHRINK}</span>
+                        </button>
+                      )}
+                    </React.Fragment>
+                  )}
+                </TransformWrapper>
               )}
             </motion.div>
           </motion.div>

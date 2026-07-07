@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { randomBytes } from "crypto";
+import { rateLimiter } from "@/lib/rate-limit";
+import { auth } from "@clerk/nextjs/server";
 
 // Schema to validate the incoming POST request
 const createGallerySchema = z.object({
@@ -16,7 +18,7 @@ const createGallerySchema = z.object({
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
     })
-  ).min(1, "At least one item is required").max(35, "Maximum 35 items allowed"),
+  ).min(1, "At least one item is required").max(50, "Maximum 50 items allowed"),
 });
 
 function generateSlug(title: string): string {
@@ -29,15 +31,28 @@ function generateSlug(title: string): string {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await rateLimiter.limit(ip);
+  if (!success) {
+    return NextResponse.json({ error: "Too many gallery creation requests. Please try again later." }, { status: 429 });
+  }
+
   try {
     const body = await req.json();
     const parsedData = createGallerySchema.parse(body);
 
     const slug = generateSlug(parsedData.title);
     
-    // Fixed expiration of 5 days as per requirements
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 5);
+    const { userId } = await auth();
+    let adminToken: string | undefined = undefined;
+    let expiresAt: Date | null = new Date();
+    
+    if (userId) {
+      expiresAt = null; // No expiration for authenticated users
+    } else {
+      expiresAt.setDate(expiresAt.getDate() + 5); // 5 days expiration for guests
+      adminToken = randomBytes(16).toString("hex");
+    }
 
     // Save to database
     const gallery = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -46,6 +61,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           title: parsedData.title,
           slug,
           expiresAt,
+          userId,
+          adminToken,
           items: {
             create: parsedData.items.map((item, index) => ({
               originalR2Key: item.originalKey,
@@ -61,7 +78,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       });
     });
 
-    return NextResponse.json({ slug: gallery.slug }, { status: 200 });
+    return NextResponse.json({ slug: gallery.slug, adminToken }, { status: 200 });
   } catch (error) {
     console.error("[POST /api/galleries] Error:", error);
     if (error instanceof z.ZodError) {
