@@ -15,6 +15,7 @@ const addImagesSchema = z.object({
       sizeBytes: z.number().int().positive(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
+      exifData: z.any().optional(),
     })
   ).min(1, "At least one item is required").max(50, "Maximum 50 items allowed"),
 });
@@ -71,6 +72,7 @@ export async function POST(
         sizeBytes: item.sizeBytes,
         width: item.width,
         height: item.height,
+        exifData: item.exifData ?? undefined,
         sortOrder: startingSortOrder + index,
       })),
     });

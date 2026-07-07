@@ -9,9 +9,11 @@ import { motion, AnimatePresence } from "framer-motion";
 interface GalleryActionsProps {
   slug: string;
   ownerId?: string | null;
+  viewCount?: number;
+  downloadCount?: number;
 }
 
-export function GalleryActions({ slug, ownerId }: GalleryActionsProps) {
+export function GalleryActions({ slug, ownerId, viewCount = 0, downloadCount = 0 }: GalleryActionsProps) {
   const { userId, isLoaded } = useAuth();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,13 +42,29 @@ export function GalleryActions({ slug, ownerId }: GalleryActionsProps) {
 
   return (
     <>
-      <button
-        onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-8 right-8 z-40 bg-teal-accent hover:bg-teal-accent/90 text-black p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center"
-        aria-label="Add Images"
-      >
-        <Plus className="w-6 h-6" />
-      </button>
+      <div className="fixed bottom-8 right-8 z-40 flex items-center gap-3">
+        {/* Analytics Pill */}
+        <div className="bg-slate-surface/80 backdrop-blur-xl border border-white/10 px-4 py-2.5 rounded-full shadow-lg flex items-center gap-4 text-xs font-semibold text-zinc-300">
+          <div className="flex items-center gap-1.5" title="Total Views">
+            <span className="text-zinc-500">👁</span>
+            <span>{viewCount}</span>
+          </div>
+          <div className="w-px h-3 bg-zinc-800" />
+          <div className="flex items-center gap-1.5" title="Total Downloads">
+            <span className="text-zinc-500">↓</span>
+            <span>{downloadCount}</span>
+          </div>
+        </div>
+
+        {/* Add Images Button */}
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="bg-teal-accent hover:bg-teal-accent/90 text-black p-4 rounded-full shadow-lg transition-transform hover:scale-105 flex items-center justify-center"
+          aria-label="Add Images"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      </div>
 
       <AnimatePresence>
         {isModalOpen && (

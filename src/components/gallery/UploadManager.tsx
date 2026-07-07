@@ -34,6 +34,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
   );
   
   const [title, setTitle] = useState("");
+  const [password, setPassword] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isCreatingGallery, setIsCreatingGallery] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
@@ -99,6 +100,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
             sizeBytes: item.file.size,
             width,
             height,
+            exifData: result.exifData,
           };
         })
       );
@@ -122,6 +124,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+            password: password || undefined,
             items: itemsWithDimensions,
           }),
         });
@@ -357,19 +360,35 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
       </div>
 
       {!existingSlug && (
-        <div className="pt-4 border-t border-zinc-800/50">
-          <label htmlFor="title" className="block text-sm font-medium text-zinc-400 mb-2">
-            Gallery Title
-          </label>
-          <input
-            id="title"
-            type="text"
-            placeholder={`e.g. Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isUploading}
-            className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
-          />
+        <div className="pt-4 border-t border-zinc-800/50 space-y-4">
+          <div>
+            <label htmlFor="title" className="block text-sm font-medium text-zinc-400 mb-2">
+              Gallery Title
+            </label>
+            <input
+              id="title"
+              type="text"
+              placeholder={`e.g. Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isUploading}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
+            />
+          </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-zinc-400 mb-2">
+              Gallery Password <span className="text-zinc-600 font-normal">(Optional)</span>
+            </label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Leave blank for public access"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={isUploading}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
+            />
+          </div>
         </div>
       )}
 

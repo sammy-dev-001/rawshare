@@ -14,10 +14,13 @@ model Gallery {
   title      String
   expiresAt  DateTime?   @map("expires_at")
   userId     String?     @map("user_id")
-  adminToken String?     @map("admin_token")
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
-  items      MediaItem[]
+  adminToken    String?     @map("admin_token")
+  passwordHash  String?     @map("password_hash")
+  viewCount     Int         @default(0) @map("view_count")
+  downloadCount Int         @default(0) @map("download_count")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  items         MediaItem[]
 
   @@index([slug])
   @@index([userId])
@@ -33,6 +36,7 @@ model MediaItem {
   sizeBytes     BigInt   @map("size_bytes")
   width         Int?
   height        Int?
+  exifData      Json?    @map("exif_data")
   sortOrder     Int      @default(0) @map("sort_order")
   createdAt     DateTime @default(now()) @map("created_at")
   gallery       Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)

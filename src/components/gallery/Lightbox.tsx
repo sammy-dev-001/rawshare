@@ -15,6 +15,7 @@ import {
   FileText,
   Maximize2,
   Minimize2,
+  Camera,
 } from "lucide-react";
 
 // Internationalized string constants to prevent linter warnings
@@ -38,6 +39,7 @@ interface MediaItem {
   height: number | null;
   sortOrder: number;
   createdAt: string;
+  exifData?: any;
 }
 
 interface LightboxProps {
@@ -46,6 +48,7 @@ interface LightboxProps {
   onClose: () => void;
   onNavigate: (index: number) => void;
   r2PublicUrl: string;
+  slug: string;
 }
 
 export function Lightbox({
@@ -54,6 +57,7 @@ export function Lightbox({
   onClose,
   onNavigate,
   r2PublicUrl,
+  slug,
 }: LightboxProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
@@ -126,6 +130,13 @@ export function Lightbox({
       // Because it has Content-Disposition: attachment, it won't navigate away;
       // it will simply trigger the native iOS "Do you want to download..." dialog!
       window.location.href = url;
+
+      // Track download
+      fetch(`/api/galleries/${slug}/analytics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "download" }),
+      }).catch(console.error);
     } catch (error) {
       console.error("Failed to download original image:", error);
       // Fallback: direct link to original url
@@ -367,6 +378,31 @@ export function Lightbox({
                   </span>
                 </div>
               </div>
+
+              {activeItem.exifData && (
+                <div className="flex items-start gap-3.5 mt-4 pt-4 border-t border-zinc-800/60">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 mt-0.5">
+                    <Camera className="h-4 w-4" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Camera Info</span>
+                    {(activeItem.exifData.Make || activeItem.exifData.Model) && (
+                      <span className="text-white font-medium">
+                        {activeItem.exifData.Make} {activeItem.exifData.Model}
+                      </span>
+                    )}
+                    {activeItem.exifData.LensModel && (
+                      <span className="text-zinc-400 text-sm">{activeItem.exifData.LensModel}</span>
+                    )}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 mt-1.5 font-mono">
+                      {activeItem.exifData.FocalLength && <span>{activeItem.exifData.FocalLength}mm</span>}
+                      {activeItem.exifData.FNumber && <span>ƒ/{activeItem.exifData.FNumber}</span>}
+                      {activeItem.exifData.ExposureTime && <span>1/{Math.round(1/activeItem.exifData.ExposureTime)}s</span>}
+                      {activeItem.exifData.ISO && <span>ISO {activeItem.exifData.ISO}</span>}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             
             <button

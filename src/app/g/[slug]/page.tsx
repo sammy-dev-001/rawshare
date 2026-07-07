@@ -6,6 +6,9 @@ import { GalleryGrid } from "@/components/gallery/GalleryGrid";
 import { ShieldAlert, Calendar } from "lucide-react";
 import { GalleryActions } from "@/components/gallery/GalleryActions";
 import ShareButton from "@/components/gallery/ShareButton";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
 
 interface GalleryPageProps {
   params: Promise<{
@@ -99,6 +102,21 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
     );
   }
 
+  // Check password protection
+  if (gallery.passwordHash) {
+    const cookieStore = await cookies();
+    const hasAccess = cookieStore.get(`gallery_access_${slug}`)?.value === "true";
+    let isOwner = false;
+    const { userId } = await auth();
+    if (userId && gallery.userId === userId) {
+      isOwner = true;
+    }
+
+    if (!hasAccess && !isOwner) {
+      redirect(`/g/${slug}/password`);
+    }
+  }
+
   // Pass down R2 Public URL from Server to Client component
   const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
 
@@ -111,6 +129,7 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
     sizeBytes: Number(item.sizeBytes),
     width: item.width,
     height: item.height,
+    exifData: item.exifData,
     sortOrder: item.sortOrder,
     createdAt: item.createdAt.toISOString(),
   }));
@@ -159,7 +178,12 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
         </div>
       </main>
 
-      <GalleryActions slug={gallery.slug} ownerId={gallery.userId} />
+      <GalleryActions 
+        slug={gallery.slug} 
+        ownerId={gallery.userId} 
+        viewCount={gallery.viewCount} 
+        downloadCount={gallery.downloadCount} 
+      />
     </div>
   );
 }

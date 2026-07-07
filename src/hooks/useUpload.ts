@@ -27,6 +27,7 @@
 
 import { useState, useCallback, useRef, MutableRefObject } from "react";
 import imageCompression from "browser-image-compression";
+import exifr from "exifr";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ export interface UploadResult {
   originalKey: string;
   /** R2 key of the WebP thumbnail, e.g. "previews/abc-123.webp". */
   previewKey: string;
+  /** Extracted EXIF metadata */
+  exifData?: any;
 }
 
 /** The quality settings for uploading original images. */
@@ -147,8 +150,20 @@ export function useUpload(): UseUploadReturn {
       // for the original, and there's no preview generated for video.
       let previewBlob: Blob | null = null;
       let originalBlob: Blob = file;
+      let exifData: any = null;
 
       if (file.type.startsWith("image/")) {
+        try {
+          exifData = await exifr.parse(file, {
+            tiff: true,
+            exif: true,
+            gps: false,
+            pick: ['Make', 'Model', 'LensModel', 'ISO', 'FNumber', 'ExposureTime', 'FocalLength']
+          });
+        } catch (e) {
+          console.warn("Failed to extract EXIF data:", e);
+        }
+
         setStatus("compressing");
         
         // 1a: Compress original image based on quality setting
@@ -242,7 +257,7 @@ export function useUpload(): UseUploadReturn {
       setStatus("success");
       setProgress(100);
 
-      return { originalKey, previewKey: previewKey || "" };
+      return { originalKey, previewKey: previewKey || "", exifData };
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
         setStatus("aborted");

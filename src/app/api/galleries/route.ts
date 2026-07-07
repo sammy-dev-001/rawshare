@@ -5,10 +5,12 @@ import { z } from "zod";
 import { randomBytes } from "crypto";
 import { rateLimiter } from "@/lib/rate-limit";
 import { auth } from "@clerk/nextjs/server";
+import bcrypt from "bcryptjs";
 
 // Schema to validate the incoming POST request
 const createGallerySchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title is too long"),
+  password: z.string().optional(),
   items: z.array(
     z.object({
       originalKey: z.string(),
@@ -17,6 +19,7 @@ const createGallerySchema = z.object({
       sizeBytes: z.number().int().positive(),
       width: z.number().int().positive().optional(),
       height: z.number().int().positive().optional(),
+      exifData: z.any().optional(),
     })
   ).min(1, "At least one item is required").max(50, "Maximum 50 items allowed"),
 });
@@ -54,6 +57,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       adminToken = randomBytes(16).toString("hex");
     }
 
+    let passwordHash: string | undefined = undefined;
+    if (parsedData.password && parsedData.password.trim().length > 0) {
+      passwordHash = await bcrypt.hash(parsedData.password.trim(), 10);
+    }
+
     // Save to database
     const gallery = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       return tx.gallery.create({
@@ -63,6 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           expiresAt,
           userId,
           adminToken,
+          passwordHash,
           items: {
             create: parsedData.items.map((item, index) => ({
               originalR2Key: item.originalKey,
@@ -71,6 +80,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               sizeBytes: item.sizeBytes,
               width: item.width,
               height: item.height,
+              exifData: item.exifData ?? undefined,
               sortOrder: index, // Preserve the order from the client array
             })),
           },
