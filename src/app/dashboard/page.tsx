@@ -6,6 +6,7 @@ import { Image as ImageIcon, Calendar } from "lucide-react";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
   
   if (!userId) {
     redirect("/");
@@ -17,6 +18,10 @@ export default async function DashboardPage() {
     include: {
       _count: {
         select: { items: true }
+      },
+      items: {
+        take: 1,
+        orderBy: { sortOrder: 'asc' }
       }
     }
   });
@@ -47,28 +52,50 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {galleries.map(gallery => (
-            <Link 
-              key={gallery.id} 
-              href={`/g/${gallery.slug}`}
-              className="bg-zinc-950 border border-zinc-800 rounded-xl p-6 hover:border-zinc-700 transition-colors group block"
-            >
-              <h3 className="text-lg font-medium text-white mb-2 group-hover:text-blue-400 transition-colors truncate">
-                {gallery.title}
-              </h3>
-              
-              <div className="flex flex-col gap-2 text-sm text-zinc-500">
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4" />
-                  <span>{gallery._count.items} {gallery._count.items === 1 ? 'item' : 'items'}</span>
+          {galleries.map(gallery => {
+            const coverItem = gallery.items[0];
+            const coverUrl = coverItem 
+              ? (coverItem.previewR2Key ? `${r2PublicUrl}/${coverItem.previewR2Key}` : `${r2PublicUrl}/${coverItem.originalR2Key}`) 
+              : null;
+
+            return (
+              <Link 
+                key={gallery.id} 
+                href={`/g/${gallery.slug}`}
+                className="group relative flex flex-col h-56 rounded-xl overflow-hidden border border-zinc-800 hover:border-zinc-700 transition-colors"
+              >
+                {coverUrl ? (
+                  <div 
+                    className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105"
+                    style={{ backgroundImage: `url(${coverUrl})` }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-zinc-900" />
+                )}
+                
+                {/* Gradient Overlay for text readability */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent transition-opacity duration-300 group-hover:opacity-90" />
+
+                {/* Content */}
+                <div className="relative mt-auto p-5">
+                  <h3 className="text-lg font-bold text-white mb-2 group-hover:text-teal-400 transition-colors line-clamp-2 drop-shadow-md">
+                    {gallery.title}
+                  </h3>
+                  
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-300 font-semibold drop-shadow">
+                    <div className="flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>{gallery._count.items} {gallery._count.items === 1 ? 'item' : 'items'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>{gallery.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4" />
-                  <span>{gallery.createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
