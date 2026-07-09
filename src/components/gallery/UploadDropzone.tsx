@@ -143,7 +143,7 @@ export function UploadDropzone({ onFilesSelected, maxFiles = 50, disabled = fals
             High-quality photos and videos are supported. Max {maxFiles} files per gallery.
           </p>
 
-          <div className="rounded-full bg-slate-surface border border-white/5 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-[0_0_15px_rgba(0,229,255,0.4)] hover:border-teal-accent/50 transition-all duration-300">
+          <div className="rounded-full bg-slate-surface border border-white/5 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-white/10 transition-all duration-300">
             Browse Files
           </div>
         </div>
