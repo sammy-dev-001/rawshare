@@ -3,6 +3,7 @@ import { Outfit, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Toaster } from "sonner";
 import { Header } from "@/components/Header";
+import { PWARegistration } from "@/components/PWARegistration";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -16,8 +17,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Shared Gallery",
+  title: "RawShare",
   description: "View and download shared media files in high resolution.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({
@@ -35,6 +37,7 @@ export default function RootLayout({
           <Header />
           <main className="flex-1 flex flex-col">{children}</main>
           <Toaster theme="dark" position="bottom-right" />
+          <PWARegistration />
         </body>
       </html>
     </ClerkProvider>

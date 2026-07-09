@@ -17,6 +17,7 @@ import {
   Minimize2,
   Camera,
 } from "lucide-react";
+import { WhatsAppStatusButton } from "./WhatsAppStatusButton";
 
 // Internationalized string constants to prevent linter warnings
 const TEXT_DOUBLE_TAP_TO_SHRINK = "Double tap to shrink";
@@ -182,6 +183,12 @@ export function Lightbox({
         </div>
 
         <div className="flex items-center gap-2">
+          <WhatsAppStatusButton 
+            originalUrl={originalUrl}
+            fileType={activeItem.fileType}
+            fileName={getFileName(activeItem.originalKey)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20 active:scale-95"
+          />
           <button
             onClick={() => setShowDetails(!showDetails)}
             className={`flex h-10 w-10 items-center justify-center rounded-full backdrop-blur-sm transition-colors active:scale-95 ${

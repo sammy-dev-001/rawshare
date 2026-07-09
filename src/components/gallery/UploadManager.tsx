@@ -5,7 +5,8 @@ import { FileUploadItem } from "@/components/gallery/FileUploadItem";
 import { UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { useRouter } from "next/navigation";
 import { motion, Reorder } from "framer-motion";
-import { ArrowRight, Loader2, RefreshCcw, Plus } from "lucide-react";
+import { ArrowRight, Loader2, RefreshCcw, Plus, Clock } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
 
 export interface UploadQueueItem {
   id: string;
@@ -39,6 +40,9 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
   const [isCreatingGallery, setIsCreatingGallery] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [quality, setQuality] = useState<UploadQuality>("original");
+  
+  const { isSignedIn } = useAuth();
+  const [expiresInHours, setExpiresInHours] = useState<number | null>(120); // 5 days by default
 
   // State to track completed uploads map (id -> result)
   const [completedResults, setCompletedResults] = useState<Record<string, UploadResult>>({});
@@ -125,6 +129,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
           body: JSON.stringify({
             title: title || `Gallery from ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
             password: password || undefined,
+            expiresInHours,
             items: itemsWithDimensions,
           }),
         });
@@ -155,7 +160,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
       setIsCreatingGallery(false);
       setIsUploading(false);
     }
-  }, [items, completedResults, title, isCreatingGallery, router]);
+  }, [items, completedResults, title, isCreatingGallery, router, existingSlug, expiresInHours, onUploadComplete, password]);
 
   // Upload Orchestration
   useEffect(() => {
@@ -375,8 +380,32 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
             />
           </div>
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-400 mb-2">
+          {/* Expiration Setting */}
+          {!existingSlug && (
+            <div className="flex flex-col gap-2">
+              <label htmlFor="expiration" className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                <Clock className="w-4 h-4" /> Link Expiration
+              </label>
+              <select
+                id="expiration"
+                value={expiresInHours === null ? "forever" : expiresInHours.toString()}
+                onChange={(e) => setExpiresInHours(e.target.value === "forever" ? null : Number(e.target.value))}
+                disabled={isUploading}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-white/20 transition-all disabled:opacity-50"
+              >
+                <option value="1">1 Hour</option>
+                <option value="24">24 Hours</option>
+                <option value="120">5 Days</option>
+                {isSignedIn && <option value="forever">Forever</option>}
+              </select>
+              {!isSignedIn && (
+                <p className="text-xs text-zinc-500">Sign in to keep links forever.</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="password" className="text-sm font-medium text-zinc-300">
               Gallery Password <span className="text-zinc-600 font-normal">(Optional)</span>
             </label>
             <input

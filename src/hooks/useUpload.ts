@@ -184,74 +184,113 @@ export function useUpload(): UseUploadReturn {
 
       setCompressedSize(originalBlob.size);
 
-      // ── Step 2: Request presigned URLs from the Next.js API ─────────────────
-      setStatus("requesting_urls");
+      // ── Step 2: Determine Upload Strategy (Standard vs Multipart) ──
+      const isMultipart = originalBlob.size > 20 * 1024 * 1024; // 20MB threshold
+      
+      let originalKey = "";
+      let previewKey = "";
 
-      const apiResponse = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: file.type,
-          sizeBytes: originalBlob.size,
-          previewSizeBytes: previewBlob?.size,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
+      if (isMultipart) {
+        setStatus("uploading");
+        setProgress(0);
 
-      if (!apiResponse.ok) {
-        const { error: apiError } = (await apiResponse.json()) as {
-          error?: string;
-        };
-        throw new Error(apiError ?? "Failed to get presigned upload URLs.");
-      }
+        const uploadPromises: Promise<any>[] = [
+          multipartUploadWithProgress(
+            originalBlob,
+            file.name,
+            file.type,
+            (pct) => setProgress(pct),
+            abortControllerRef.current.signal
+          ).then(key => { originalKey = key; })
+        ];
 
-      const {
-        originalUploadUrl,
-        originalKey,
-        previewUploadUrl,
-        previewKey,
-      } = (await apiResponse.json()) as PresignedUrlResponse;
+        // Compress and upload preview if available
+        if (previewBlob) {
+          const apiResponse = await fetch("/api/upload", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              fileName: "preview.webp",
+              fileType: "image/webp",
+              sizeBytes: previewBlob.size,
+            }),
+            signal: abortControllerRef.current.signal,
+          });
+          if (apiResponse.ok) {
+            const { originalUploadUrl, originalKey: pKey } = await apiResponse.json();
+            previewKey = pKey;
+            uploadPromises.push(
+              fetch(originalUploadUrl, {
+                method: "PUT",
+                headers: { "Content-Type": "image/webp" },
+                body: previewBlob,
+                signal: abortControllerRef.current.signal,
+              }).then((res) => {
+                if (!res.ok) throw new Error(`Preview upload failed: ${res.status}`);
+              })
+            );
+          }
+        }
 
-      // ── Step 3: Upload files directly to R2 in parallel ────────────────
-      //
-      // Using XMLHttpRequest for the original gives us real `progress` events.
-      // The preview is small, so a plain fetch() is fine there.
-      setStatus("uploading");
-      setProgress(0);
+        await Promise.all(uploadPromises);
+      } else {
+        setStatus("requesting_urls");
 
-      const uploadPromises: Promise<any>[] = [
-        // Upload the original with progress tracking
-        uploadWithProgress(
+        const apiResponse = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: file.type,
+            sizeBytes: originalBlob.size,
+            previewSizeBytes: previewBlob?.size,
+          }),
+          signal: abortControllerRef.current.signal,
+        });
+
+        if (!apiResponse.ok) {
+          const { error: apiError } = (await apiResponse.json()) as { error?: string };
+          throw new Error(apiError ?? "Failed to get presigned upload URLs.");
+        }
+
+        const {
           originalUploadUrl,
-          originalBlob,
-          file.type,
-          (pct) => setProgress(pct),
-          xhrRef
-        )
-      ];
+          originalKey: oKey,
+          previewUploadUrl,
+          previewKey: pKey,
+        } = (await apiResponse.json()) as PresignedUrlResponse;
 
-      // Upload the compressed preview if available
-      if (previewUploadUrl && previewBlob) {
-        uploadPromises.push(
-          fetch(previewUploadUrl, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "image/webp",
-            },
-            body: previewBlob,
-            signal: abortControllerRef.current?.signal,
-          }).then((res) => {
-            if (!res.ok) {
-              throw new Error(
-                `Preview upload failed with status ${res.status}.`
-              );
-            }
-          })
-        );
+        originalKey = oKey;
+        previewKey = pKey || "";
+
+        setStatus("uploading");
+        setProgress(0);
+
+        const uploadPromises: Promise<any>[] = [
+          uploadWithProgress(
+            originalUploadUrl,
+            originalBlob,
+            file.type,
+            (pct) => setProgress(pct),
+            xhrRef
+          )
+        ];
+
+        if (previewUploadUrl && previewBlob) {
+          uploadPromises.push(
+            fetch(previewUploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": "image/webp" },
+              body: previewBlob,
+              signal: abortControllerRef.current.signal,
+            }).then((res) => {
+              if (!res.ok) throw new Error(`Preview upload failed: ${res.status}`);
+            })
+          );
+        }
+
+        await Promise.all(uploadPromises);
       }
-
-      await Promise.all(uploadPromises);
 
       // ── Step 4: Return the keys so the caller can save them to the DB ────────
       setStatus("success");
@@ -345,5 +384,79 @@ function uploadWithProgress(
     xhr.setRequestHeader("Content-Type", contentType);
     xhr.send(body);
   });
+}
+
+/**
+ * Handles multipart upload for files > 20MB.
+ */
+async function multipartUploadWithProgress(
+  file: Blob,
+  fileName: string,
+  fileType: string,
+  onProgress: (percent: number) => void,
+  abortSignal: AbortSignal
+): Promise<string> {
+  const createRes = await fetch("/api/upload/multipart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "create", fileName, fileType }),
+    signal: abortSignal,
+  });
+  if (!createRes.ok) throw new Error("Failed to create multipart upload");
+  const { uploadId, key } = await createRes.json();
+
+  const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB chunks
+  const numParts = Math.ceil(file.size / CHUNK_SIZE);
+  const parts: { ETag: string; PartNumber: number }[] = [];
+  
+  let uploadedBytes = 0;
+  
+  for (let i = 0; i < numParts; i++) {
+    if (abortSignal.aborted) throw new DOMException("Aborted", "AbortError");
+    
+    const start = i * CHUNK_SIZE;
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
+    const partNumber = i + 1;
+    
+    const signRes = await fetch("/api/upload/multipart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sign-part", key, uploadId, partNumber }),
+      signal: abortSignal,
+    });
+    if (!signRes.ok) throw new Error(`Failed to sign part ${partNumber}`);
+    const { signedUrl } = await signRes.json();
+    
+    const uploadRes = await fetch(signedUrl, {
+      method: "PUT",
+      body: chunk,
+      signal: abortSignal,
+    });
+    if (!uploadRes.ok) throw new Error(`Failed to upload part ${partNumber}`);
+    
+    const eTag = uploadRes.headers.get("ETag") || uploadRes.headers.get("etag");
+    if (!eTag) throw new Error(`No ETag returned for part ${partNumber}`);
+    
+    // S3 requires ETags to be wrapped in quotes if they aren't already
+    const cleanETag = eTag.replace(/"/g, "");
+    parts.push({ ETag: `"${cleanETag}"`, PartNumber: partNumber });
+    
+    uploadedBytes += chunk.size;
+    onProgress(Math.round((uploadedBytes / file.size) * 100));
+  }
+  
+  const completeRes = await fetch("/api/upload/multipart", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "complete", key, uploadId, parts }),
+    signal: abortSignal,
+  });
+  
+  if (!completeRes.ok) {
+    throw new Error("Failed to complete multipart upload");
+  }
+  
+  return key;
 }
 

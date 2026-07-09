@@ -642,9 +642,15 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
       </div>
 
       {items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center text-zinc-500">
-          <ImageIcon className="h-12 w-12 stroke-[1.5] mb-3 text-zinc-600" />
-          <p className="text-sm font-medium">This gallery is empty.</p>
+        <div className="flex flex-col items-center justify-center py-32 text-center text-zinc-500">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-teal-500/20 blur-3xl rounded-full" />
+            <div className="relative bg-zinc-900/50 p-6 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-sm">
+              <ImageIcon className="h-16 w-16 stroke-[1] text-teal-accent/80" />
+            </div>
+          </div>
+          <h3 className="text-xl font-medium text-zinc-300 mb-2">No Media Yet</h3>
+          <p className="text-sm max-w-sm mx-auto">This gallery is currently empty. Check back later or upload some media to get started.</p>
         </div>
       ) : (
         <div className="space-y-8">

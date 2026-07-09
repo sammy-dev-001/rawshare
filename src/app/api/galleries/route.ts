@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 const createGallerySchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title is too long"),
   password: z.string().optional(),
+  expiresInHours: z.number().nullable().optional(),
   items: z.array(
     z.object({
       originalKey: z.string(),
@@ -50,10 +51,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     let adminToken: string | undefined = undefined;
     let expiresAt: Date | null = new Date();
     
-    if (userId) {
-      expiresAt = null; // No expiration for authenticated users
+    if (parsedData.expiresInHours === null) {
+      if (userId) {
+        expiresAt = null; // Forever
+      } else {
+        // Guests cannot use forever
+        expiresAt.setDate(expiresAt.getDate() + 5); 
+      }
     } else {
-      expiresAt.setDate(expiresAt.getDate() + 5); // 5 days expiration for guests
+      const hours = parsedData.expiresInHours || 120;
+      expiresAt.setHours(expiresAt.getHours() + hours);
+    }
+    
+    if (!userId) {
       adminToken = randomBytes(16).toString("hex");
     }
 

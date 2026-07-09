@@ -4,7 +4,8 @@ import { useState, useCallback } from "react";
 import { UploadDropzone } from "@/components/gallery/UploadDropzone";
 import { UploadManager } from "@/components/gallery/UploadManager";
 import { motion, AnimatePresence } from "framer-motion";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Zap, Lock, Smartphone } from "lucide-react";
+import { PwaFileLoader } from "@/components/PwaFileLoader";
 
 export default function Home() {
   const [files, setFiles] = useState<File[]>([]);
@@ -19,7 +20,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-black text-zinc-100 selection:bg-zinc-800 flex flex-col relative overflow-hidden">
-      
+      <PwaFileLoader onFilesLoaded={setFiles} />
       {/* Ambient Background Glows */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-[30%] -left-[10%] w-[70%] h-[70%] rounded-full bg-slate-bg blur-[120px] mix-blend-screen animate-aurora-1" />
@@ -53,7 +54,7 @@ export default function Home() {
             transition={{ delay: 0.1 }}
             className="text-lg text-zinc-400 max-w-xl mx-auto"
           >
-            Upload high-quality photos and videos to create a stunning, shareable gallery link. Links expire automatically in 5 days.
+            Upload high-quality photos and videos to create a stunning, shareable gallery link.
           </motion.p>
         </div>
 
@@ -83,9 +84,36 @@ export default function Home() {
           </div>
         </motion.div>
         
-        <p className="text-center text-zinc-600 text-xs mt-8">
-          Max 50 files per gallery. High resolution supported.
-        </p>
+        
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 max-w-2xl mx-auto text-center"
+        >
+          <div className="flex flex-col items-center gap-2 text-zinc-400">
+            <div className="p-3 rounded-full bg-white/5 border border-white/10 text-white">
+              <Zap size={20} />
+            </div>
+            <h3 className="font-semibold text-zinc-200">Original Quality</h3>
+            <p className="text-sm">Bypass standard compression. Your files stay perfectly crisp.</p>
+          </div>
+          <div className="flex flex-col items-center gap-2 text-zinc-400">
+            <div className="p-3 rounded-full bg-white/5 border border-white/10 text-white">
+              <Lock size={20} />
+            </div>
+            <h3 className="font-semibold text-zinc-200">Auto-Expires</h3>
+            <p className="text-sm">Set your links to expire automatically, or keep them forever.</p>
+          </div>
+          <div className="flex flex-col items-center gap-2 text-zinc-400">
+            <div className="p-3 rounded-full bg-white/5 border border-white/10 text-white">
+              <Smartphone size={20} />
+            </div>
+            <h3 className="font-semibold text-zinc-200">WhatsApp Bypass</h3>
+            <p className="text-sm">Share directly to WhatsApp Status without losing quality.</p>
+          </div>
+        </motion.div>
+        
       </div>
     </main>
   );
