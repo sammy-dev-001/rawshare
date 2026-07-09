@@ -28,14 +28,7 @@ export default function Home() {
         <div className="absolute -bottom-[40%] left-[20%] w-[80%] h-[80%] rounded-full bg-slate-surface blur-[120px] mix-blend-screen animate-aurora-3" />
       </div>
 
-      <header className="w-full p-6 flex justify-between items-center border-b border-white/5 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <div className="bg-white text-black p-1.5 rounded-xl">
-            <ImageIcon size={20} />
-          </div>
-          <h1 className="text-xl font-bold tracking-tight">Gallery</h1>
-        </div>
-      </header>
+
 
       <div className="flex-1 max-w-3xl w-full mx-auto px-6 py-12 flex flex-col justify-center">
         

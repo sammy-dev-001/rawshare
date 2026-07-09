@@ -1,7 +1,7 @@
 import { SignInButton, UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
-import { Image as ImageIcon } from "lucide-react";
+import Image from "next/image";
 
 export async function Header() {
   const { userId } = await auth();
@@ -10,7 +10,7 @@ export async function Header() {
     <header className="border-b border-zinc-800 bg-black sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 text-white hover:opacity-80 transition-opacity">
-          <ImageIcon className="w-6 h-6" />
+          <Image src="/icons/icon-192.png" alt="RawShare Logo" width={32} height={32} className="w-8 h-8 rounded-lg" />
           <span className="font-bold text-lg hidden sm:inline">RawShare</span>
         </Link>
         
