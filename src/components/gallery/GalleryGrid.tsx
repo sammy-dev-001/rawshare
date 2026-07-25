@@ -35,6 +35,7 @@ interface MediaItem {
   height: number | null;
   sortOrder: number;
   createdAt: string;
+  exifData?: any;
 }
 
 interface GalleryGridProps {
@@ -476,32 +477,118 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
         return;
       }
     } else {
-      for (let i = 0; i < selectedItems.length; i++) {
-        const item = selectedItems[i];
+      const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      let shareSucceeded = false;
+
+      // Try Web Share API on mobile devices to allow "Save to Photos"
+      if (isMobile && navigator.share && navigator.canShare) {
         try {
-          const url = `${r2PublicUrl}/${item.originalKey}`;
-          const response = await fetch(url);
-          if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
-          const blob = await response.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const filename = item.originalKey.split("/").pop() || "file";
-          const a = document.createElement("a");
-          a.href = blobUrl;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-        } catch (err) {
-          console.error("Download failed for", item.originalKey, err);
+          const shareFiles: File[] = [];
+          for (let i = 0; i < selectedItems.length; i++) {
+            const item = selectedItems[i];
+            const url = `${r2PublicUrl}/${item.originalKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
+            const blob = await response.blob();
+            const filename = item.originalKey.split("/").pop() || "media.jpg";
+            shareFiles.push(new File([blob], filename, { type: blob.type }));
+            
+            setDownloadProgress({
+              phase: "downloading",
+              progress: Math.round(((i + 1) / selectedItems.length) * 100),
+              currentFile: i + 1,
+              totalFiles: selectedItems.length,
+            });
+          }
+
+          if (navigator.canShare({ files: shareFiles })) {
+            await navigator.share({
+              files: shareFiles,
+            });
+            shareSucceeded = true;
+            
+            setDownloadProgress({ phase: "idle", progress: 100, currentFile: 0, totalFiles: 0 });
+            setIsDownloading(false);
+            handleClearSelection();
+            toast.success(`Saved ${selectedItems.length} items successfully!`);
+            
+            // Track download
+            fetch(`/api/galleries/${slug}/analytics`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "download" }),
+            }).catch(console.error);
+          }
+        } catch (err: any) {
+          if (err.name === "AbortError") {
+            // User cancelled share sheet
+            setDownloadProgress({ phase: "idle", progress: 0, currentFile: 0, totalFiles: 0 });
+            setIsDownloading(false);
+            return;
+          }
+          console.error("Web Share failed, falling back to standard download...", err);
         }
-        setDownloadProgress({
-          phase: "downloading",
-          progress: Math.round(((i + 1) / selectedItems.length) * 100),
-          currentFile: i + 1,
-          totalFiles: selectedItems.length,
-        });
-        if (i < selectedItems.length - 1) await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+
+      if (!shareSucceeded) {
+        if (selectedItems.length === 1) {
+          // Single file download
+          const item = selectedItems[0];
+          try {
+            const url = `${r2PublicUrl}/${item.originalKey}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const filename = item.originalKey.split("/").pop() || "file";
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+          } catch (err) {
+            console.error("Download failed for", item.originalKey, err);
+          }
+          setDownloadProgress({
+            phase: "downloading",
+            progress: 100,
+            currentFile: 1,
+            totalFiles: 1,
+          });
+        } else {
+          // Multiple files - use ZIP
+          setDownloadProgress({ phase: "zipping", progress: 50, currentFile: 0, totalFiles: selectedItems.length });
+          
+          try {
+            const formData = new FormData();
+            formData.append("keys", selectedItems.map(item => item.originalKey).join(","));
+            formData.append("title", galleryTitle || slug);
+
+            const response = await fetch("/api/download-zip", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (!response.ok) throw new Error("Failed to generate zip");
+
+            setDownloadProgress({ phase: "saving", progress: 90, currentFile: 0, totalFiles: selectedItems.length });
+            const blob = await response.blob();
+            
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = `${(galleryTitle || slug).replace(/[^a-z0-9]/gi, "_")}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+          } catch (err) {
+            console.error("Zip download failed", err);
+            toast.error("Failed to create zip file. Try downloading fewer items.");
+          }
+        }
       }
     }
 

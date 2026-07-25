@@ -157,8 +157,8 @@ export function useUpload(): UseUploadReturn {
           exifData = await exifr.parse(file, {
             tiff: true,
             exif: true,
-            gps: false,
-            pick: ['Make', 'Model', 'LensModel', 'ISO', 'FNumber', 'ExposureTime', 'FocalLength']
+            gps: true,
+            pick: ['Make', 'Model', 'LensModel', 'ISO', 'FNumber', 'ExposureTime', 'FocalLength', 'latitude', 'longitude']
           });
         } catch (e) {
           console.warn("Failed to extract EXIF data:", e);

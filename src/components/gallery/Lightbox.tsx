@@ -16,6 +16,7 @@ import {
   Maximize2,
   Minimize2,
   Camera,
+  MapPin,
 } from "lucide-react";
 import { WhatsAppStatusButton } from "./WhatsAppStatusButton";
 
@@ -387,28 +388,52 @@ export function Lightbox({
               </div>
 
               {activeItem.exifData && (
-                <div className="flex items-start gap-3.5 mt-4 pt-4 border-t border-zinc-800/60">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 mt-0.5">
-                    <Camera className="h-4 w-4" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Camera Info</span>
-                    {(activeItem.exifData.Make || activeItem.exifData.Model) && (
-                      <span className="text-white font-medium">
-                        {activeItem.exifData.Make} {activeItem.exifData.Model}
-                      </span>
-                    )}
-                    {activeItem.exifData.LensModel && (
-                      <span className="text-zinc-400 text-sm">{activeItem.exifData.LensModel}</span>
-                    )}
+                <>
+                  <div className="flex items-start gap-3.5 mt-4 pt-4 border-t border-zinc-800/60">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 mt-0.5">
+                      <Camera className="h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Camera Info</span>
+                      {(activeItem.exifData.Make || activeItem.exifData.Model) && (
+                        <span className="text-white font-medium">
+                          {activeItem.exifData.Make} {activeItem.exifData.Model}
+                        </span>
+                      )}
+                      {activeItem.exifData.LensModel && (
+                        <span className="text-zinc-400 text-sm">{activeItem.exifData.LensModel}</span>
+                      )}
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 mt-1.5 font-mono">
                       {activeItem.exifData.FocalLength && <span>{activeItem.exifData.FocalLength}mm</span>}
                       {activeItem.exifData.FNumber && <span>ƒ/{activeItem.exifData.FNumber}</span>}
-                      {activeItem.exifData.ExposureTime && <span>1/{Math.round(1/activeItem.exifData.ExposureTime)}s</span>}
+                      {typeof activeItem.exifData.ExposureTime === 'number' && activeItem.exifData.ExposureTime > 0 && <span>1/{Math.round(1/activeItem.exifData.ExposureTime)}s</span>}
                       {activeItem.exifData.ISO && <span>ISO {activeItem.exifData.ISO}</span>}
                     </div>
                   </div>
                 </div>
+
+                {(typeof activeItem.exifData.latitude === 'number' && typeof activeItem.exifData.longitude === 'number') && (
+                  <div className="flex items-start gap-3.5 mt-4 pt-4 border-t border-zinc-800/60">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-800 text-zinc-400 mt-0.5">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs text-zinc-500 font-semibold uppercase tracking-wider mb-1">Location</span>
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${activeItem.exifData.latitude},${activeItem.exifData.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 transition-colors font-medium text-sm flex items-center gap-1"
+                      >
+                        View on Google Maps
+                      </a>
+                      <span className="text-xs text-zinc-500 mt-0.5 font-mono">
+                        {activeItem.exifData.latitude.toFixed(5)}, {activeItem.exifData.longitude.toFixed(5)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
             

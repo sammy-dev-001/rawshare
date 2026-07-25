@@ -13,8 +13,8 @@ export async function POST(req: NextRequest) {
   }
 
   const keys = keysStr.split(",");
-  if (keys.length === 0 || keys.length > 50) {
-    return new Response("Invalid number of keys (1-50)", { status: 400 });
+  if (keys.length === 0 || keys.length > 1000) {
+    return new Response("Invalid number of keys (1-1000)", { status: 400 });
   }
 
   // Ensure r2PublicUrl is available
