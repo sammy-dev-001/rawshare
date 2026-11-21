@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/orphans",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/keep-alive",
+      "schedule": "0 12 */4 * *"
     }
   ]
 }

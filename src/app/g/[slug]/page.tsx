@@ -47,6 +47,7 @@ export async function generateMetadata({ params }: GalleryPageProps): Promise<Me
   return {
     title: `${gallery.title} | RawShare`,
     description: `View ${gallery.title} on RawShare. Shared instantly, no compression.`,
+    robots: gallery.passwordHash ? { index: false, follow: false } : undefined,
     openGraph: {
       title: `${gallery.title} | RawShare`,
       description: `View ${gallery.title} on RawShare. Shared instantly, no compression.`,
@@ -102,15 +103,14 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
     );
   }
 
+  // Determine if the current user is the gallery owner (used for both password bypass and GPS)
+  const { userId } = await auth();
+  const isOwner = Boolean(userId && gallery.userId === userId);
+
   // Check password protection
   if (gallery.passwordHash) {
     const cookieStore = await cookies();
     const hasAccess = cookieStore.get(`gallery_access_${slug}`)?.value === "true";
-    let isOwner = false;
-    const { userId } = await auth();
-    if (userId && gallery.userId === userId) {
-      isOwner = true;
-    }
 
     if (!hasAccess && !isOwner) {
       redirect(`/g/${slug}/password`);
@@ -120,19 +120,28 @@ export default async function GalleryPage({ params }: GalleryPageProps) {
   // Pass down R2 Public URL from Server to Client component
   const r2PublicUrl = process.env.R2_PUBLIC_URL || "";
 
-  // Convert BigInt sizeBytes and serialize Dates to avoid hydration issues
-  const serializedItems = gallery.items.map((item) => ({
-    id: item.id,
-    originalKey: item.originalR2Key,
-    previewKey: item.previewR2Key,
-    fileType: item.fileType,
-    sizeBytes: Number(item.sizeBytes),
-    width: item.width,
-    height: item.height,
-    exifData: item.exifData,
-    sortOrder: item.sortOrder,
-    createdAt: item.createdAt.toISOString(),
-  }));
+  // Convert BigInt sizeBytes and serialize Dates to avoid hydration issues.
+  // Strip GPS coordinates from exifData for non-owner viewers to protect privacy.
+  const serializedItems = gallery.items.map((item) => {
+    let exifData = item.exifData as Record<string, unknown> | null;
+    if (exifData && !isOwner) {
+      const { latitude, longitude, ...safeExif } = exifData as any;
+      void latitude; void longitude;
+      exifData = safeExif;
+    }
+    return {
+      id: item.id,
+      originalKey: item.originalR2Key,
+      previewKey: item.previewR2Key,
+      fileType: item.fileType,
+      sizeBytes: Number(item.sizeBytes),
+      width: item.width,
+      height: item.height,
+      exifData,
+      sortOrder: item.sortOrder,
+      createdAt: item.createdAt.toISOString(),
+    };
+  });
 
   return (
     <div className="min-h-screen bg-slate-bg text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 relative">

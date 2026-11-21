@@ -6,8 +6,10 @@ import { ListObjectsV2Command, ListObjectsV2CommandOutput, DeleteObjectsCommand 
 export const maxDuration = 300; // Allow long execution time
 
 export async function GET(req: Request) {
+  // CRON_SECRET is mandatory. If it isn't set the cron endpoint is locked down.
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("Authorization");
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -36,6 +36,10 @@ export function GalleryActions({ slug, ownerId, viewCount = 0, downloadCount = 0
     }
 
     setIsAuthorized(authorized);
+
+    const handleOpenModal = () => setIsModalOpen(true);
+    window.addEventListener("open-upload-modal", handleOpenModal);
+    return () => window.removeEventListener("open-upload-modal", handleOpenModal);
   }, [userId, isLoaded, ownerId, slug]);
 
   if (!isAuthorized) return null;

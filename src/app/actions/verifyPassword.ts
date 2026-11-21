@@ -24,6 +24,7 @@ export async function verifyGalleryPassword(slug: string, password: string) {
     cookieStore.set(`gallery_access_${slug}`, "true", { 
       httpOnly: true, 
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       path: "/", 
       maxAge: 60 * 60 * 24 * 7 // 1 week 
     });

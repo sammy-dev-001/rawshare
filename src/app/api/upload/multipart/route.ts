@@ -7,7 +7,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { r2Client, R2_BUCKET_NAME } from "@/lib/r2";
 import { randomUUID } from "crypto";
-import { rateLimiter } from "@/lib/rate-limit";
+import { rateLimiter, chunkRateLimiter } from "@/lib/rate-limit";
 
 // Helpers
 function getExtension(fileName: string, fileType: string): string {
@@ -36,6 +36,12 @@ export async function POST(req: NextRequest) {
     const { action } = body;
 
     if (action === "create") {
+      // Rate-limit: one token per multipart create
+      const { success } = await rateLimiter.limit(ip);
+      if (!success) {
+        return NextResponse.json({ error: "Too many upload requests." }, { status: 429 });
+      }
+
       const { fileName, fileType } = body;
       const key = buildOriginalKey(fileName, fileType);
       
@@ -49,6 +55,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ uploadId: response.UploadId, key }, { status: 200 });
       
     } else if (action === "sign-part") {
+      // sign-part is called once per 10 MB chunk — use the higher-ceiling chunk bucket
+      // so large files don't exhaust the main upload rate limit.
+      const { success } = await chunkRateLimiter.limit(ip);
+      if (!success) {
+        return NextResponse.json({ error: "Too many chunk-sign requests. Please try again later." }, { status: 429 });
+      }
+
       const { key, uploadId, partNumber } = body;
       
       const command = new UploadPartCommand({
@@ -62,6 +75,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ signedUrl }, { status: 200 });
       
     } else if (action === "complete") {
+      // Rate-limit: one token per multipart complete
+      const { success } = await rateLimiter.limit(ip);
+      if (!success) {
+        return NextResponse.json({ error: "Too many upload requests." }, { status: 429 });
+      }
+
       const { key, uploadId, parts } = body;
       
       const command = new CompleteMultipartUploadCommand({

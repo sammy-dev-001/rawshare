@@ -5,6 +5,20 @@ import { rateLimiter } from "@/lib/rate-limit";
 import { auth } from "@clerk/nextjs/server";
 import { DeleteObjectsCommand } from "@aws-sdk/client-s3";
 import { r2Client, R2_BUCKET_NAME } from "@/lib/r2";
+import { timingSafeEqual } from "crypto";
+
+/** Constant-time string comparison to prevent timing-based token enumeration. */
+function safeTokenEquals(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    const bufA = Buffer.from(a, "utf8");
+    const bufB = Buffer.from(b, "utf8");
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 const addImagesSchema = z.object({
   items: z.array(
@@ -49,7 +63,7 @@ export async function POST(
     let isAuthorized = false;
     if (gallery.userId && gallery.userId === userId) {
       isAuthorized = true;
-    } else if (gallery.adminToken && gallery.adminToken === adminToken) {
+    } else if (safeTokenEquals(gallery.adminToken, adminToken)) {
       isAuthorized = true;
     }
 
@@ -98,6 +112,13 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
 ): Promise<NextResponse> {
+  // Rate-limit the DELETE endpoint (was missing)
+  const ip = req.headers.get("x-forwarded-for") ?? "127.0.0.1";
+  const { success } = await rateLimiter.limit(ip);
+  if (!success) {
+    return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 });
+  }
+
   const resolvedParams = await params;
 
   try {
@@ -117,7 +138,7 @@ export async function DELETE(
     let isAuthorized = false;
     if (gallery.userId && gallery.userId === userId) {
       isAuthorized = true;
-    } else if (gallery.adminToken && gallery.adminToken === adminToken) {
+    } else if (safeTokenEquals(gallery.adminToken, adminToken)) {
       isAuthorized = true;
     }
 

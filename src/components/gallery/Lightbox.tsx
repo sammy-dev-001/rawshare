@@ -1,5 +1,5 @@
-/* eslint-disable */
 "use client";
+
 
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -63,7 +63,6 @@ export function Lightbox({
 }: LightboxProps) {
   const [showDetails, setShowDetails] = useState(false);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [dragDirection, setDragDirection] = useState<"x" | "y" | null>(null);
 
   const activeItem = items.find((_, idx) => idx === activeIndex);
 
@@ -120,7 +119,7 @@ export function Lightbox({
       
       // Request a presigned download URL from our API
       // The API forces the Content-Disposition: attachment header.
-      const response = await fetch(`/api/download-url?key=${encodeURIComponent(activeItem.originalKey)}&filename=${encodeURIComponent(filename)}`);
+      const response = await fetch(`/api/download-url?key=${encodeURIComponent(activeItem.originalKey)}&filename=${encodeURIComponent(filename)}&slug=${encodeURIComponent(slug)}`);
       
       if (!response.ok) {
         throw new Error("Failed to get download URL");
@@ -128,9 +127,37 @@ export function Lightbox({
       
       const { url } = await response.json();
       
+      const isMobile = typeof navigator !== "undefined" && (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+      
+      if (isMobile && navigator.share && navigator.canShare) {
+        try {
+          const fetchRes = await fetch(url);
+          if (!fetchRes.ok) throw new Error("Failed to fetch media for share");
+          const blob = await fetchRes.blob();
+          const fileToShare = new File([blob], filename, { type: blob.type });
+          
+          if (navigator.canShare({ files: [fileToShare] })) {
+            await navigator.share({ files: [fileToShare] });
+            
+            // Track download
+            fetch(`/api/galleries/${slug}/analytics`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "download" }),
+            }).catch(console.error);
+            return;
+          }
+        } catch (err: any) {
+          if (err.name === "AbortError") {
+            return; // User cancelled the share sheet
+          }
+          console.error("Web share failed, falling back", err);
+        }
+      }
+
       // Navigate to the presigned URL directly. 
       // Because it has Content-Disposition: attachment, it won't navigate away;
-      // it will simply trigger the native iOS "Do you want to download..." dialog!
+      // it will simply trigger the native download dialog (if supported).
       window.location.href = url;
 
       // Track download
@@ -165,7 +192,6 @@ export function Lightbox({
         handleNext();
       }
     }
-    setDragDirection(null);
   };
 
   return (

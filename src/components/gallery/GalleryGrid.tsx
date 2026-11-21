@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Image as ImageIcon, Calendar, GripVertical, AlertTriangle, Loader2 } from "lucide-react";
+import { Check, Image as ImageIcon, Calendar, GripVertical, AlertTriangle, Loader2, Download, Plus } from "lucide-react";
 import { ActionBar } from "./ActionBar";
 import { Lightbox } from "./Lightbox";
 import { useAuth } from "@clerk/nextjs";
@@ -434,11 +434,12 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
   }, []);
 
   // --- Downloader ---
-  const handleDownloadSelected = async () => {
-    if (selectedIds.size === 0 || isDownloading) return;
+  const handleDownloadSelected = async (overrideItems?: MediaItem[]) => {
+    const itemsToDownload = overrideItems || items.filter((item) => selectedIds.has(item.id));
+    if (itemsToDownload.length === 0 || isDownloading) return;
     setIsDownloading(true);
 
-    const selectedItems = items.filter((item) => selectedIds.has(item.id));
+    const selectedItems = itemsToDownload;
 
     setDownloadProgress({
       phase: "downloading",
@@ -447,7 +448,10 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
       totalFiles: selectedItems.length,
     });
 
-    if ("showDirectoryPicker" in window) {
+    const isMobile = typeof navigator !== "undefined" && (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+    const isIOS = typeof navigator !== "undefined" && (/iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    if ("showDirectoryPicker" in window && !isMobile) {
       try {
         const dirHandle = await (window as any).showDirectoryPicker({ mode: "readwrite", startIn: "downloads" });
         for (let i = 0; i < selectedItems.length; i++) {
@@ -477,7 +481,6 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
         return;
       }
     } else {
-      const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       let shareSucceeded = false;
 
       // Try Web Share API on mobile devices to allow "Save to Photos"
@@ -506,18 +509,20 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
               files: shareFiles,
             });
             shareSucceeded = true;
-            
+
             setDownloadProgress({ phase: "idle", progress: 100, currentFile: 0, totalFiles: 0 });
             setIsDownloading(false);
             handleClearSelection();
+            if (navigator.vibrate) navigator.vibrate(100);
             toast.success(`Saved ${selectedItems.length} items successfully!`);
-            
-            // Track download
+
+            // Track download once, then exit — the trailing code must not run
             fetch(`/api/galleries/${slug}/analytics`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ type: "download" }),
             }).catch(console.error);
+            return;
           }
         } catch (err: any) {
           if (err.name === "AbortError") {
@@ -531,6 +536,17 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
       }
 
       if (!shareSucceeded) {
+        if (isIOS) {
+          toast.error("Your browser doesn't support batch saving. Tap each photo individually to save.");
+          setDownloadProgress({ phase: "idle", progress: 0, currentFile: 0, totalFiles: 0 });
+          setIsDownloading(false);
+          handleClearSelection();
+          return;
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+
         if (selectedItems.length === 1) {
           // Single file download
           const item = selectedItems[0];
@@ -548,8 +564,10 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
             a.click();
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            successCount++;
           } catch (err) {
             console.error("Download failed for", item.originalKey, err);
+            failCount++;
           }
           setDownloadProgress({
             phase: "downloading",
@@ -557,52 +575,97 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
             currentFile: 1,
             totalFiles: 1,
           });
-        } else {
-          // Multiple files - use ZIP
-          setDownloadProgress({ phase: "zipping", progress: 50, currentFile: 0, totalFiles: selectedItems.length });
-          
+        } else if (!isMobile) {
+          // Desktop batch download: use ZIP API
           try {
-            const formData = new FormData();
-            formData.append("keys", selectedItems.map(item => item.originalKey).join(","));
-            formData.append("title", galleryTitle || slug);
-
-            const response = await fetch("/api/download-zip", {
-              method: "POST",
-              body: formData,
-            });
-
-            if (!response.ok) throw new Error("Failed to generate zip");
-
-            setDownloadProgress({ phase: "saving", progress: 90, currentFile: 0, totalFiles: selectedItems.length });
-            const blob = await response.blob();
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = "/api/download-zip";
             
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = blobUrl;
-            a.download = `${(galleryTitle || slug).replace(/[^a-z0-9]/gi, "_")}.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            const keysInput = document.createElement("input");
+            keysInput.type = "hidden";
+            keysInput.name = "keys";
+            keysInput.value = selectedItems.map(i => i.originalKey).join(",");
+            form.appendChild(keysInput);
+            
+            const titleInput = document.createElement("input");
+            titleInput.type = "hidden";
+            titleInput.name = "title";
+            titleInput.value = galleryTitle || "RawShare_Download";
+            form.appendChild(titleInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+            
+            successCount = selectedItems.length;
+            setDownloadProgress({
+              phase: "downloading",
+              progress: 100,
+              currentFile: selectedItems.length,
+              totalFiles: selectedItems.length,
+            });
           } catch (err) {
-            console.error("Zip download failed", err);
-            toast.error("Failed to create zip file. Try downloading fewer items.");
+            console.error("ZIP Download failed", err);
+            failCount = selectedItems.length;
+          }
+        } else {
+          // Multiple files on Mobile — download individually so files are visible in the phone gallery
+          // (ZIP files cannot be opened in the iOS Photos app or Android gallery)
+          for (let i = 0; i < selectedItems.length; i++) {
+            const item = selectedItems[i];
+            try {
+              const url = `${r2PublicUrl}/${item.originalKey}`;
+              const response = await fetch(url);
+              if (!response.ok) throw new Error(`Failed to fetch ${item.originalKey}`);
+              const blob = await response.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              const filename = item.originalKey.split("/").pop() || `file_${i + 1}`;
+              const a = document.createElement("a");
+              a.href = blobUrl;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+              successCount++;
+            } catch (err) {
+              console.error("Download failed for", selectedItems[i].originalKey, err);
+              failCount++;
+            }
+            setDownloadProgress({
+              phase: "downloading",
+              progress: Math.round(((i + 1) / selectedItems.length) * 100),
+              currentFile: i + 1,
+              totalFiles: selectedItems.length,
+            });
+            // Small delay between downloads to avoid browser popup-blocker heuristics
+            if (i < selectedItems.length - 1) {
+              await new Promise<void>((resolve) => setTimeout(resolve, 200));
+            }
           }
         }
+
+        setDownloadProgress({ phase: "idle", progress: 100, currentFile: 0, totalFiles: 0 });
+        setIsDownloading(false);
+        handleClearSelection();
+        
+        if (failCount > 0) {
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100]);
+          toast.error(`Downloaded ${successCount} items. ${failCount} failed.`);
+        } else {
+          if (navigator.vibrate) navigator.vibrate(100);
+          toast.success(`Downloaded ${successCount} items successfully!`);
+        }
+
+        // Track download
+        fetch(`/api/galleries/${slug}/analytics`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "download" }),
+        }).catch(console.error);
       }
     }
-
-    setDownloadProgress({ phase: "idle", progress: 100, currentFile: 0, totalFiles: 0 });
-    setIsDownloading(false);
-    handleClearSelection();
-    toast.success(`Downloaded ${selectedItems.length} items successfully!`);
-
-    // Track download
-    fetch(`/api/galleries/${slug}/analytics`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "download" }),
-    }).catch(console.error);
   };
 
   // --- Delete Handler ---
@@ -715,6 +778,19 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
             </button>
           )}
 
+          {!isReorderMode && !isSelectMode && items.length > 0 && (
+            <button
+              onClick={() => {
+                handleDownloadSelected(items);
+              }}
+              disabled={isDownloading}
+              className="rounded-full px-4 py-1.5 text-xs font-semibold border transition-all bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2 disabled:opacity-50"
+            >
+              {isDownloading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              {isDownloading ? "Downloading..." : "Download All"}
+            </button>
+          )}
+
           {isReorderMode && (
             <button
               onClick={handleSaveOrder}
@@ -729,15 +805,33 @@ export function GalleryGrid({ items: initialItems, r2PublicUrl, galleryTitle, sl
       </div>
 
       {items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-32 text-center text-zinc-500">
+        <div className="flex flex-col items-center justify-center py-32 px-4 text-center border-2 border-dashed border-zinc-800 rounded-3xl bg-slate-surface/30 mt-8 transition-colors hover:border-zinc-700">
           <div className="relative mb-6">
-            <div className="absolute inset-0 bg-teal-500/20 blur-3xl rounded-full" />
-            <div className="relative bg-zinc-900/50 p-6 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-sm">
-              <ImageIcon className="h-16 w-16 stroke-[1] text-teal-accent/80" />
+            <div className="absolute inset-0 bg-teal-500/10 blur-3xl rounded-full" />
+            <div className="relative bg-zinc-900/50 p-8 rounded-3xl border border-white/5 shadow-2xl backdrop-blur-sm">
+              <ImageIcon className="h-16 w-16 stroke-[1] text-teal-accent/70" />
             </div>
           </div>
-          <h3 className="text-xl font-medium text-zinc-300 mb-2">No Media Yet</h3>
-          <p className="text-sm max-w-sm mx-auto">This gallery is currently empty. Check back later or upload some media to get started.</p>
+          <h3 className="text-2xl font-bold text-white mb-3">No photos yet</h3>
+          
+          {isAuthorized ? (
+            <div className="flex flex-col items-center mt-2">
+              <p className="text-sm text-zinc-400 max-w-sm mx-auto mb-8">
+                Your gallery is ready. Upload some high-quality photos or videos to share them with the world.
+              </p>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('open-upload-modal'))}
+                className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-teal-accent px-8 py-3.5 font-bold text-black transition-all hover:scale-105 hover:bg-teal-accent/90 active:scale-95 shadow-[0_0_40px_-10px_rgba(0,229,255,0.4)] hover:shadow-[0_0_60px_-15px_rgba(0,229,255,0.6)]"
+              >
+                <Plus className="h-5 w-5" />
+                Upload Media
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400 max-w-sm mx-auto">
+              This gallery is currently empty. Check back later once the owner has uploaded some media.
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-8">

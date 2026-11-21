@@ -15,9 +15,11 @@ interface FileUploadItemProps {
   startUpload: boolean;
   isUploadingBatch: boolean;
   quality: UploadQuality;
+  /** Incremented by UploadManager to force a retry from the parent level. */
+  retrySignal?: number;
 }
 
-export function FileUploadItem({ item, onComplete, onError, onRemove, startUpload, isUploadingBatch, quality }: FileUploadItemProps) {
+export function FileUploadItem({ item, onComplete, onError, onRemove, startUpload, isUploadingBatch, quality, retrySignal = 0 }: FileUploadItemProps) {
   const file = item.file;
   const { upload, status, progress, error, reset, abort, compressedSize } = useUpload();
   const [hasStarted, setHasStarted] = useState(false);
@@ -109,6 +111,19 @@ export function FileUploadItem({ item, onComplete, onError, onRemove, startUploa
         .catch((err) => onError(item.id, err.message));
     }
   }, [startUpload, hasStarted, status, upload, file, onComplete, onError, quality, item.id, precompressedBlob]);
+
+  // Watch for parent-triggered retries (Retry All Failed button)
+  const prevRetrySignalRef = useRef(retrySignal);
+  useEffect(() => {
+    if (retrySignal > prevRetrySignalRef.current && (status === "error" || status === "aborted" || status === "idle")) {
+      prevRetrySignalRef.current = retrySignal;
+      reset();
+      setHasStarted(true);
+      upload(file, { quality, precompressedBlob: precompressedBlob || undefined })
+        .then((result) => onComplete(item.id, result))
+        .catch((err) => onError(item.id, err.message));
+    }
+  }, [retrySignal, status, reset, upload, file, quality, precompressedBlob, onComplete, onError, item.id]);
 
   const statusRef = useRef(status);
   useEffect(() => {

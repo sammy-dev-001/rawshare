@@ -6,12 +6,10 @@ import { DeleteObjectsCommand } from "@aws-sdk/client-s3";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  // Optional: Add a simple secret check to prevent abuse
+  // CRON_SECRET is mandatory. If it isn't set the cron endpoint is locked down.
+  const cronSecret = process.env.CRON_SECRET;
   const authHeader = req.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

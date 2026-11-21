@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { FileUploadItem } from "@/components/gallery/FileUploadItem";
 import { UploadResult, UploadQuality } from "@/hooks/useUpload";
 import { useRouter } from "next/navigation";
@@ -51,9 +51,14 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
   const MAX_CONCURRENT_UPLOADS = 3;
   const [activeUploadIds, setActiveUploadIds] = useState<Set<string>>(new Set());
   const [failedUploadIds, setFailedUploadIds] = useState<Set<string>>(new Set());
+  // retryCounters: bumping a file's counter signals FileUploadItem to reset and retry.
+  // Initialised lazily from `items` to share the same IDs.
+  const [retryCounters, setRetryCounters] = useState<Record<string, number>>({});
+  const isCreatingGalleryRef = useRef(false);
 
   const createGallery = useCallback(async () => {
-    if (isCreatingGallery) return;
+    if (isCreatingGalleryRef.current) return;
+    isCreatingGalleryRef.current = true;
     setIsCreatingGallery(true);
     setGlobalError(null);
 
@@ -213,7 +218,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
     });
   }, []);
 
-  const handleUploadError = useCallback((id: string) => {
+  const handleUploadError = useCallback((id: string, _error?: string) => {
     setActiveUploadIds(prev => {
       const next = new Set(prev);
       next.delete(id);
@@ -225,6 +230,20 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
       return next;
     });
   }, []);
+
+  const handleRetryAllFailed = useCallback(() => {
+    const failedIds = Array.from(failedUploadIds);
+    setFailedUploadIds(new Set());
+    setGlobalError(null);
+    // Increment each failed item's retry counter — FileUploadItem watches this
+    // and will reset + re-upload when it changes.
+    setRetryCounters(prev => {
+      const next = { ...prev };
+      failedIds.forEach(id => { next[id] = (next[id] ?? 0) + 1; });
+      return next;
+    });
+    setIsUploading(true);
+  }, [failedUploadIds]);
 
   const handleRemoveItem = useCallback((id: string) => {
     setItems(prev => prev.filter(item => item.id !== id));
@@ -241,6 +260,11 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
     setFailedUploadIds(prev => {
       const next = new Set(prev);
       next.delete(id);
+      return next;
+    });
+    setRetryCounters(prev => {
+      const next = { ...prev };
+      delete next[id];
       return next;
     });
   }, []);
@@ -316,18 +340,18 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
             }
           }}
         >
-          {items.map((item) => (
-            <FileUploadItem
-              key={item.id}
-              item={item}
-              quality={quality}
-              startUpload={activeUploadIds.has(item.id)}
-              isUploadingBatch={isUploading}
-              onComplete={handleUploadComplete}
-              onError={handleUploadError}
-              onRemove={handleRemoveItem}
-            />
-          ))}
+          {items.map((item) =>              <FileUploadItem
+                key={item.id}
+                item={item}
+                quality={quality}
+                startUpload={activeUploadIds.has(item.id)}
+                isUploadingBatch={isUploading}
+                retrySignal={retryCounters[item.id] ?? 0}
+                onComplete={handleUploadComplete}
+                onError={handleUploadError}
+                onRemove={handleRemoveItem}
+              />
+          )}
         </Reorder.Group>
       </div>
 
@@ -421,9 +445,19 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
         </div>
       )}
 
+
       {globalError && (
         <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex flex-col gap-3">
           <span className="text-red-400 text-sm">{globalError}</span>
+          {failedUploadIds.size > 0 && (
+            <button
+              onClick={handleRetryAllFailed}
+              className="flex items-center justify-center gap-2 bg-red-500/20 hover:bg-red-500/30 text-red-200 py-2 rounded-lg font-medium transition-colors text-sm"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Retry All Failed ({failedUploadIds.size})
+            </button>
+          )}
           {failedUploadIds.size === 0 && completedCount === items.length && (
             <button
               onClick={createGallery}
@@ -440,6 +474,7 @@ export function UploadManager({ initialFiles, onClear, existingSlug, onUploadCom
           )}
         </div>
       )}
+
 
       <button
         onClick={handleStartUpload}
